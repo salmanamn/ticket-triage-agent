@@ -14,12 +14,16 @@ from triage.ai import OpenAIEmbedder
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--create", action="store_true", help="create database/container (local emulator only)")
+    parser.add_argument(
+        "--create", action="store_true", help="create database + knowledge/triage containers (local emulator only)"
+    )
     args = parser.parse_args()
     local_env.load()
 
     embedder = OpenAIEmbedder()
     container = cosmos.ensure_kb_container(embedder.dimensions) if args.create else cosmos.kb_container()
+    if args.create:
+        cosmos.ensure_triage_container()
 
     docs: list[retrieval.Document] = []
     for path in sorted((local_env.ROOT / "kb" / "articles").glob("*.md")):

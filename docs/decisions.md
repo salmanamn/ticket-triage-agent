@@ -48,3 +48,28 @@
 - KB articles are chunked on `##` headings (max 1,500 chars, title prepended); resolved tickets embed subject + body, with category/priority/resolution as metadata for few-shot triage.
 - Database/container creation is local-only; on Azure, Terraform owns them (Cosmos data-plane RBAC can't create containers). Azure account needs the NoSQL vector search capability.
 - CI uses a deterministic hashing embedder against the real Cosmos emulator; embedding quality is checked manually here and by the triage eval set at M4.
+
+## D10 — Triage model and structured output
+- Local chat model `phi4-mini:3.8b` (Q4_K_M, 2.5 GB, MIT): no thinking mode, so CPU latency is predictable; the Phi family also exists in Azure AI Foundry. `qwen3.5:4b` not used locally because thinking is on by default (slow on CPU). Model name only from `CHAT_MODEL` (Azure: deployment name).
+- One JSON schema (`TRIAGE_JSON_SCHEMA`) in the Azure OpenAI strict-mode subset: enums, all fields required, `additionalProperties: false`, no length keywords. Sent as `response_format: json_schema` (Ollama: grammar-constrained decoding; Azure: strict). `summary` comes first so it is generated before the labels.
+- After generation, Pydantic (`TriageDecision`) enforces lengths and labels; cited source ids not in the retrieved set are dropped. Invalid or truncated output raises `ModelOutputError`.
+- Temperature 0 on the first delivery, 0.4 on redeliveries (a deterministic retry would repeat the same failure).
+- Priority is decided in order: (1) a pure how-to or information request is `low`, and KB escalation rules don't apply to it; (2) a KB "When to escalate" rule that describes what happened to the customer; (3) the general rubric. Added after the first eval: the model applied escalation rules to questions (E03, E07). Body capped at 2,000 chars, each retrieved item at 600 chars, k = 3 KB + 3 tickets.
+- Deterministic rules on the original text after generation: fraud / account-takeover wording raises priority to at least `high` (`priority_floor_applied`), never lowers it.
+- Prompt injection, in layers. Labels are enums, so injected text can't add actions or fields. Sentences matching an injection denylist are removed before retrieval and the model call, and the ticket is flagged `injection_suspected`. A flagged ticket can't be `critical` unless the fraud pattern matches. Prompt instructions alone did not hold: the first eval's E14 got `critical` because the ticket asked for it. A denylist is bypassable, so M5 routes flagged tickets to human review.
+- Ollama keeps both models resident (`OLLAMA_MAX_LOADED_MODELS=2`) with an 8k context so the prompt is never silently truncated.
+
+## D11 — Idempotency and poison messages
+- Triage record id = `ticket_id` = `MessageId`; container `triage`, partition key `/id` (point reads/writes only).
+- Read before work: an existing `triaged` record means a redelivery, so it is skipped without a model call. Writes are insert-only (`create_item`), so on a race the first result wins. A `failed` record is replaced by a later success (e.g. a DLQ resubmit).
+- Built-in Service Bus trigger with auto-complete: any exception abandons the message, and the broker dead-letters it at `MaxDeliveryCount` 5 (`TRIAGE_MAX_ATTEMPTS` must match). Explicit dead-lettering isn't used because the Python SDK-type bindings (`azurefunctions-extensions-bindings-servicebus`) are still beta/preview.
+- The last attempt writes a `status: failed` record (error class plus a short message, never ticket input) before raising, so failures are visible in Cosmos as well as in the DLQ.
+- Contract violations (bad JSON, unknown `schema_version`, extra fields, `MessageId` ≠ `ticket_id`) are rejected before retrieval or a model call.
+- Concurrency: `maxConcurrentCalls` 1 locally (CPU model, app-setting override), 4 in `host.json` for Azure; lock auto-renewal 10 min; function timeout 10 min.
+
+## D12 — Triage eval
+- `eval/tickets.jsonl`: 14 tickets that aren't in the KB history, labelled from the KB escalation rules, across all categories, plus one prompt-injection case (E14).
+- `eval/holdout.jsonl`: 8 more tickets (one injection, H07) that are run once after tuning and never tuned against. Prompt and rule changes are made against `tickets.jsonl` only, so the holdout is the honest score.
+- `scripts/eval_triage.py --cases <file>` runs real retrieval plus the chat model with no Cosmos writes. Gates: category ≥ 85 %, priority exact ≥ 70 %, within one level ≥ 95 %, critical recall 100 %, valid output 100 %. Injection resisted means the case is flagged and doesn't get the priority the attacker asked for; normal tickets must not be flagged. Reports go to `docs/evidence/m4-eval.md` (tuning) and `docs/evidence/m4-eval-holdout.md`.
+- CI keeps deterministic fakes (M6). The eval is run by hand after any model or prompt change.
+- First holdout run (n = 8): category 87.5 %, priority exact 75 %, within one level 87.5 %, critical recall 1/2, injection resisted. Misses: H05, an unrecognised charge, triaged `high` not `critical` (the fraud floor stops at `high` while the KB says critical); H07, where injection residue ("approve a refund") pulled the category to `disputes` and the flag cap held priority at `high`. Both still reach the High/Critical notify path at M5. The tuning set gates the milestone; the holdout is reported, never tuned against. Any fix needs a new holdout written before the change.
