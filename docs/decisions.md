@@ -20,6 +20,7 @@
 - Backend: SQL Server 2022 container (SQL Edge no longer used).
 - Entities declared in `emulators/servicebus/config.json`; the emulator's admin client is .NET-only, and entities don't persist across restarts.
 - Emulator has no Entra ID, no partitioning; 1 namespace, 256 KB messages, 1 h max TTL.
+- Emulator caps the duplicate-detection window at 5 min (`PT5M`); Azure keeps 10 min (`PT10M`), set in Terraform at M7.
 
 ## D5 — Events and email
 - Event Grid has no emulator: a local stub accepts CloudEvents and forwards them to the Functions Event Grid webhook.
@@ -28,3 +29,15 @@
 ## D6 — Credentials
 - Emulator well-known keys/connection strings only in gitignored `local.settings.json` and `.env`.
 - Azure: identity-based connections only (`__fullyQualifiedNamespace`, `__accountEndpoint`), local/key auth disabled on every resource.
+
+## D7 — Local lab shape
+- Core services always on: SQL Server (SB backend, capped 1.5 GB), Service Bus emulator, Cosmos vNext (HTTP, health on 8082), Azurite.
+- Ollama (`--profile ai`) and Mailpit (`--profile notify`) start only when a milestone needs them; never run alongside the Project 2 Kusto lab.
+- All ports bound to 127.0.0.1 (emulators use well-known keys). Floating tags pinned by digest; Service Bus emulator restarts re-create entities from config.json.
+
+## D8 — Ingest
+- `POST /api/tickets` (function key on Azure) validates with Pydantic (`extra=forbid`, size caps, 32 KB body limit) and publishes via the Service Bus SDK, not an output binding: Python output bindings can't set `MessageId`, which duplicate detection needs.
+- `ticket_id` is the client idempotency key (generated UUID when omitted) and becomes `MessageId`; retries within the detection window are dropped by the broker.
+- Same setting for SDK and trigger: `ServiceBusConnection` (emulator string, local) / `ServiceBusConnection__fullyQualifiedNamespace` + managed identity (Azure).
+- Ingest logic is runtime-independent (`triage/ingest.py`) for unit tests. Errors never echo input; logs carry ticket id and channel only (no email/body).
+- Queue contract `TicketMessage` carries `schema_version`.

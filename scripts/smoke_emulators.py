@@ -7,6 +7,7 @@
 
 Emulator well-known credentials only. Never used against Azure.
 """
+
 import os
 import sys
 import uuid

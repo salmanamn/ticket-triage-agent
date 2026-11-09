@@ -1,0 +1,38 @@
+[project]
+name = "ticket-triage-agent"
+version = "0.1.0"
+description = "Event-driven support-ticket triage agent"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "azure-functions==2.3.0",
+    "azure-identity==1.27.0",
+    "azure-servicebus==7.15.0",
+    "pydantic[email]==2.14.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = ["integration: needs the local emulators (docker compose up -d)"]
+addopts = "-ra --strict-markers"
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]
+"scripts/**" = ["S105"]
