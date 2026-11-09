@@ -41,3 +41,10 @@
 - Same setting for SDK and trigger: `ServiceBusConnection` (emulator string, local) / `ServiceBusConnection__fullyQualifiedNamespace` + managed identity (Azure).
 - Ingest logic is runtime-independent (`triage/ingest.py`) for unit tests. Errors never echo input; logs carry ticket id and channel only (no email/body).
 - Queue contract `TicketMessage` carries `schema_version`.
+
+## D9 — Retrieval
+- One `knowledge` container, partition key `/kind` (`kb` | `ticket`), vector policy `/embedding` float32 cosine 768 dims, DiskANN index; `/embedding/*` excluded from the regular index.
+- Local: `nomic-embed-text` via Ollama with `search_query:` / `search_document:` prefixes. Azure: `text-embedding-3-small` with `dimensions=768` (`EMBEDDING_REQUEST_DIMENSIONS=true`). Each environment indexes with its own model; queries filter on `embeddingModel`.
+- KB articles are chunked on `##` headings (max 1,500 chars, title prepended); resolved tickets embed subject + body, with category/priority/resolution as metadata for few-shot triage.
+- Database/container creation is local-only; on Azure, Terraform owns them (Cosmos data-plane RBAC can't create containers). Azure account needs the NoSQL vector search capability.
+- CI uses a deterministic hashing embedder against the real Cosmos emulator; embedding quality is checked manually here and by the triage eval set at M4.

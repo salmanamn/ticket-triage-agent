@@ -4,6 +4,17 @@
     "FUNCTIONS_WORKER_RUNTIME": "python",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "ServiceBusConnection": "Endpoint=sb://localhost;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=SAS_KEY_VALUE;UseDevelopmentEmulator=true;",
-    "TICKETS_QUEUE": "tickets"
+    "TICKETS_QUEUE": "tickets",
+    "OPENAI_BASE_URL": "http://localhost:11434/v1",
+    "OPENAI_AUTH": "key",
+    "OPENAI_API_KEY": "ollama",
+    "EMBEDDING_MODEL": "nomic-embed-text",
+    "EMBEDDING_DIMENSIONS": "768",
+    "EMBED_QUERY_PREFIX": "search_query: ",
+    "EMBED_DOC_PREFIX": "search_document: ",
+    "COSMOS_ENDPOINT": "http://localhost:8081",
+    "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
+    "COSMOS_DATABASE": "triage",
+    "COSMOS_KB_CONTAINER": "knowledge"
   }
 }
