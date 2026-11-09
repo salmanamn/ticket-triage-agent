@@ -4,6 +4,7 @@ from functools import lru_cache
 from typing import Any
 
 from azure.cosmos import ContainerProxy, CosmosClient, PartitionKey
+from azure.cosmos.exceptions import CosmosResourceExistsError, CosmosResourceNotFoundError
 
 from . import settings
 
@@ -51,3 +52,37 @@ def ensure_kb_container(dimensions: int) -> ContainerProxy:
 def kb_container() -> ContainerProxy:
     cfg = settings.cosmos()
     return client().get_database_client(cfg.database).get_container_client(cfg.kb_container)
+
+
+def ensure_triage_container() -> ContainerProxy:
+    """Local emulator only (Terraform on Azure). Partition key /id: every access is a point read/write by ticket."""
+    cfg = settings.cosmos()
+    db = client().create_database_if_not_exists(cfg.database)
+    return db.create_container_if_not_exists(id=cfg.triage_container, partition_key=PartitionKey(path="/id"))
+
+
+def triage_container() -> ContainerProxy:
+    cfg = settings.cosmos()
+    return client().get_database_client(cfg.database).get_container_client(cfg.triage_container)
+
+
+class CosmosTriageStore:
+    def __init__(self, container: ContainerProxy):
+        self.container = container
+
+    def get(self, ticket_id: str) -> dict[str, Any] | None:
+        try:
+            return self.container.read_item(item=ticket_id, partition_key=ticket_id)
+        except CosmosResourceNotFoundError:
+            return None
+
+    def create(self, doc: dict[str, Any]) -> bool:
+        """Insert-only. False when the id already exists (another delivery won the race)."""
+        try:
+            self.container.create_item(doc)
+            return True
+        except CosmosResourceExistsError:
+            return False
+
+    def upsert(self, doc: dict[str, Any]) -> None:
+        self.container.upsert_item(doc)

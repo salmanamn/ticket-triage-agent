@@ -1,7 +1,7 @@
 """OpenAI-compatible clients: Ollama /v1 locally (key), Azure OpenAI v1 endpoint (Entra ID) on Azure."""
 
 from functools import lru_cache
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from openai import OpenAI
 
@@ -16,6 +16,18 @@ class Embedder(Protocol):
     dimensions: int
 
     def embed(self, texts: list[str], purpose: Purpose) -> list[list[float]]: ...
+
+
+class ModelOutputError(Exception):
+    """The model returned nothing usable (truncated, empty, or not matching the schema)."""
+
+
+class ChatModel(Protocol):
+    model: str
+
+    def complete_json(
+        self, *, system: str, user: str, schema: dict[str, Any], name: str, temperature: float
+    ) -> str: ...
 
 
 @lru_cache(maxsize=1)
@@ -50,3 +62,29 @@ class OpenAIEmbedder:
                     raise ValueError(f"{self.model} returned {len(item.embedding)} dims, expected {self.dimensions}")
                 vectors.append(item.embedding)
         return vectors
+
+
+class OpenAIChatModel:
+    """Structured JSON via `response_format=json_schema` (Ollama: grammar-constrained; Azure OpenAI: strict)."""
+
+    def __init__(self, model: str, client: OpenAI | None = None, timeout_s: float = 180.0, max_tokens: int = 700):
+        self.model = model
+        self._client = client or openai_client()
+        self.timeout_s = timeout_s
+        self.max_tokens = max_tokens
+
+    def complete_json(self, *, system: str, user: str, schema: dict[str, Any], name: str, temperature: float) -> str:
+        resp = self._client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
+            response_format={"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
+            temperature=temperature,
+            max_tokens=self.max_tokens,
+            timeout=self.timeout_s,
+        )
+        choice = resp.choices[0]
+        if choice.finish_reason == "length":
+            raise ModelOutputError(f"output truncated at {self.max_tokens} tokens")
+        if not choice.message.content:
+            raise ModelOutputError("empty output")
+        return choice.message.content

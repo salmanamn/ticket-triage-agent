@@ -15,6 +15,14 @@
     "COSMOS_ENDPOINT": "http://localhost:8081",
     "COSMOS_KEY": "C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==",
     "COSMOS_DATABASE": "triage",
-    "COSMOS_KB_CONTAINER": "knowledge"
+    "COSMOS_KB_CONTAINER": "knowledge",
+    "COSMOS_TRIAGE_CONTAINER": "triage",
+    "CHAT_MODEL": "phi4-mini:3.8b",
+    "TRIAGE_KB_K": "3",
+    "TRIAGE_TICKET_K": "3",
+    "TRIAGE_MAX_ATTEMPTS": "5",
+    "TRIAGE_MAX_OUTPUT_TOKENS": "700",
+    "OPENAI_TIMEOUT_SECONDS": "180",
+    "AzureFunctionsJobHost__extensions__serviceBus__maxConcurrentCalls": "1"
   }
 }

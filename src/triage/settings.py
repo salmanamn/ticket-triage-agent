@@ -67,6 +67,7 @@ class CosmosSettings:
     key: str | None  # emulator only; Azure uses managed identity
     database: str
     kb_container: str
+    triage_container: str
 
 
 def cosmos() -> CosmosSettings:
@@ -75,4 +76,26 @@ def cosmos() -> CosmosSettings:
         key=os.getenv("COSMOS_KEY"),
         database=os.getenv("COSMOS_DATABASE", "triage"),
         kb_container=os.getenv("COSMOS_KB_CONTAINER", "knowledge"),
+        triage_container=os.getenv("COSMOS_TRIAGE_CONTAINER", "triage"),
+    )
+
+
+@dataclass(frozen=True)
+class TriageSettings:
+    chat_model: str  # Ollama model tag locally, Azure OpenAI deployment name on Azure
+    kb_k: int
+    ticket_k: int
+    max_attempts: int  # must equal the queue's MaxDeliveryCount
+    timeout_s: float
+    max_output_tokens: int
+
+
+def triage() -> TriageSettings:
+    return TriageSettings(
+        chat_model=_require("CHAT_MODEL"),
+        kb_k=int(os.getenv("TRIAGE_KB_K", "3")),
+        ticket_k=int(os.getenv("TRIAGE_TICKET_K", "3")),
+        max_attempts=int(os.getenv("TRIAGE_MAX_ATTEMPTS", "5")),
+        timeout_s=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "180")),
+        max_output_tokens=int(os.getenv("TRIAGE_MAX_OUTPUT_TOKENS", "700")),
     )
