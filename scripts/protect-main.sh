@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO=${REPO:-salmanamn/ticket-triage-agent}
 REF=${1:?usage: protect-main.sh <ref with green CI>}
-CHECKS=(lint unit integration tests-must-fail)
+CHECKS=(lint unit integration tests-must-fail iac-static iac-plan)
 
 runs=$(gh api "repos/$REPO/commits/$REF/check-runs?per_page=100" \
   --jq '.check_runs[] | [.name, (.conclusion // "pending"), (.app.id | tostring)] | @tsv')
