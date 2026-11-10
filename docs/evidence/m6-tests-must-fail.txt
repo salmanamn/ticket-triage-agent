@@ -1,0 +1,17 @@
+OK       baseline: 96 passed in 4.40s
+KILLED   fraud-floor-removed                tests/unit/test_agent.py (1 failed)
+KILLED   injection-not-stripped             tests/unit/test_agent.py (2 failed)
+KILLED   injection-may-reach-critical       tests/unit/test_agent.py (1 failed)
+KILLED   invented-sources-kept              tests/unit/test_agent.py (1 failed)
+KILLED   redelivery-retriaged               tests/unit/test_agent.py (1 failed)
+KILLED   first-attempt-not-deterministic    tests/unit/test_agent.py (1 failed)
+KILLED   structured-output-dropped          tests/unit/test_fake_llm.py (10 failed)
+KILLED   message-id-not-ticket-id           tests/unit/test_ingest.py (2 failed)
+KILLED   validation-error-echoes-input      tests/unit/test_ingest.py (1 failed)
+KILLED   customer-email-in-event            tests/unit/test_events.py (1 failed)
+KILLED   event-republished                  tests/unit/test_events.py (1 failed)
+KILLED   injection-routed-as-escalation     tests/unit/test_notify.py (3 failed)
+KILLED   duplicate-email-sent               tests/unit/test_notify.py (1 failed)
+KILLED   customer-text-in-mail-subject      tests/unit/test_notify.py (2 failed)
+KILLED   stub-retries-bad-request           tests/unit/test_eventgrid_stub.py (1 failed)
+15/15 mutations killed
