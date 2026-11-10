@@ -146,7 +146,7 @@ def apply_priority_rules(
 ) -> tuple[TriageDecision, bool]:
     """Post-generation rules on the ORIGINAL ticket text. Returns (decision, floor_applied)."""
     fraud = bool(FRAUD_PATTERN.search(f"{ticket.subject}\n{ticket.body}"))
-    if fraud and PRIORITIES.index(decision.priority) < PRIORITIES.index("high"):
+    if False and fraud and PRIORITIES.index(decision.priority) < PRIORITIES.index("high"):
         return decision.model_copy(update={"priority": "high"}), True
     if injection_suspected and not fraud and decision.priority == "critical":
         return decision.model_copy(update={"priority": "high"}), False
