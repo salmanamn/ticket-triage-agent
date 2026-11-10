@@ -59,7 +59,7 @@ check_images() {
       echo "FAIL $img is not pinned the same way in docker-compose.yml"
       fail=1
     fi
-  done < <(grep -oE '(mcr\.microsoft\.com|axllent)/[^"[:space:]]+' .github/workflows/ci.yml | sort -u)
+  done < <(grep -oE '(mcr\.microsoft\.com|axllent|floci)/[^"[:space:]]+' .github/workflows/ci.yml | sort -u)
   (( count > 0 )) || { echo "FAIL no emulator images found in ci.yml"; return 1; }
   return $fail
 }

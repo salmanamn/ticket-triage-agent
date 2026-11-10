@@ -1,0 +1,46 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "accountName": { "type": "string" },
+    "databaseName": { "type": "string" },
+    "containerName": { "type": "string" },
+    "dimensions": { "type": "int", "defaultValue": 768 }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "apiVersion": "2025-10-15",
+      "name": "[format('{0}/{1}/{2}', parameters('accountName'), parameters('databaseName'), parameters('containerName'))]",
+      "properties": {
+        "resource": {
+          "id": "[parameters('containerName')]",
+          "partitionKey": { "paths": ["/kind"], "kind": "Hash", "version": 2 },
+          "vectorEmbeddingPolicy": {
+            "vectorEmbeddings": [
+              {
+                "path": "/embedding",
+                "dataType": "float32",
+                "distanceFunction": "cosine",
+                "dimensions": "[parameters('dimensions')]"
+              }
+            ]
+          },
+          "indexingPolicy": {
+            "indexingMode": "consistent",
+            "automatic": true,
+            "includedPaths": [{ "path": "/*" }],
+            "excludedPaths": [{ "path": "/\"_etag\"/?" }, { "path": "/embedding/*" }],
+            "vectorIndexes": [{ "path": "/embedding", "type": "diskANN" }]
+          }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "containerName": {
+      "type": "string",
+      "value": "[parameters('containerName')]"
+    }
+  }
+}

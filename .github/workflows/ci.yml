@@ -1,126 +1,175 @@
 name: ci
 
 on:
-    pull_request:
-        branches: [main]
-    push:
-        branches: [main]
-    workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-    contents: read
+  contents: read
 
 concurrency:
-    group: ci-${{ github.ref }}
-    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
-    UV_VERSION: "0.13.7"
-    # Throwaway password for the CI-only SQL Server that backs the Service Bus emulator (port not published).
-    MSSQL_SA_PASSWORD: Ci-only-Sa-Passw0rd
-    SERVICEBUS_IMAGE: mcr.microsoft.com/azure-messaging/servicebus-emulator:2.0.0
+  UV_VERSION: "0.13.7"
+  # Throwaway password for the CI-only SQL Server that backs the Service Bus emulator (port not published).
+  MSSQL_SA_PASSWORD: Ci-only-Sa-Passw0rd
+  SERVICEBUS_IMAGE: mcr.microsoft.com/azure-messaging/servicebus-emulator:2.0.0
+  TF_VERSION: "1.17.1"
 
 jobs:
-    lint:
-        name: lint
-        runs-on: ubuntu-24.04
-        timeout-minutes: 10
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - name: Install uv
-              run: pipx install "uv==${UV_VERSION}"
-            - name: Sync (lockfile must be current)
-              run: uv sync --locked
-            - name: ruff format
-              run: uv run ruff format --check --diff .
-            - name: ruff check
-              run: uv run ruff check --output-format=github .
-            - name: src/requirements.txt matches uv.lock
-              run: uv export --no-dev --no-hashes -o src/requirements.txt && git diff --exit-code src/requirements.txt
-            - name: CI emulator images match docker-compose.yml
-              run: ./scripts/ci-emulators.sh check-images
+  lint:
+    name: lint
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Sync (lockfile must be current)
+        run: uv sync --locked
+      - name: ruff format
+        run: uv run ruff format --check --diff .
+      - name: ruff check
+        run: uv run ruff check --output-format=github .
+      - name: src/requirements.txt matches uv.lock
+        run: uv export --no-dev --no-hashes -o src/requirements.txt && git diff --exit-code src/requirements.txt
+      - name: CI emulator images match docker-compose.yml
+        run: ./scripts/ci-emulators.sh check-images
 
-    unit:
-        name: unit
-        runs-on: ubuntu-24.04
-        timeout-minutes: 10
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - name: Install uv
-              run: pipx install "uv==${UV_VERSION}"
-            - name: Sync
-              run: uv sync --locked
-            - name: Unit tests (fakes, fake LLM, Event Grid stub)
-              run: uv run pytest -m "not integration"
+  unit:
+    name: unit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Sync
+        run: uv sync --locked
+      - name: Unit tests (fakes, fake LLM, Event Grid stub)
+        run: uv run pytest -m "not integration"
 
-    integration:
-        name: integration
-        runs-on: ubuntu-24.04
-        timeout-minutes: 25
-        services:
-            mssql:
-                image: mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
-                env:
-                    ACCEPT_EULA: "Y"
-                    MSSQL_SA_PASSWORD: ${{ env.MSSQL_SA_PASSWORD }}
-                    MSSQL_PID: Developer
-                    MSSQL_MEMORY_LIMIT_MB: "1536"
-                options: >-
-                    --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Ci-only-Sa-Passw0rd -Q 'SELECT 1' -b -o /dev/null"
-                    --health-interval 10s
-                    --health-timeout 5s
-                    --health-retries 12
-                    --health-start-period 20s
-            cosmos:
-                image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:db53613dae19d0a3d5ad50688d14aa6e957af082dafea56b52e1bd3a6b3f1406
-                env:
-                    PROTOCOL: http
-                    ENABLE_EXPLORER: "false"
-                    ENABLE_TELEMETRY: "false"
-                ports:
-                    - 8081:8081
-                    - 8082:8080
-            mailpit:
-                image: axllent/mailpit:v1.33.1
-                env:
-                    MP_SMTP_AUTH_ACCEPT_ANY: "1"
-                    MP_SMTP_AUTH_ALLOW_INSECURE: "1"
-                ports:
-                    - 1025:1025
-                    - 8025:8025
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - name: Install uv
-              run: pipx install "uv==${UV_VERSION}"
-            - name: Sync
-              run: uv sync --locked
-            - name: Start Service Bus emulator on the service network
-              run: ./scripts/ci-emulators.sh start-servicebus "${{ job.services.mssql.network }}"
-            - name: Wait for emulators + SDK smoke
-              run: ./scripts/ci-emulators.sh wait
-            - name: Integration tests (emulators, fake LLM, Event Grid stub, Mailpit)
-              run: uv run pytest -m integration
-            - name: Container logs
-              if: failure()
-              run: ./scripts/ci-emulators.sh logs
+  integration:
+    name: integration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server@sha256:cf8f0ab2ebe61feec2eed2629061a07d247f791c2a8ddda74a4ac9f06a291718
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: ${{ env.MSSQL_SA_PASSWORD }}
+          MSSQL_PID: Developer
+          MSSQL_MEMORY_LIMIT_MB: "1536"
+        options: >-
+          --health-cmd "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P Ci-only-Sa-Passw0rd -Q 'SELECT 1' -b -o /dev/null"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 20s
+      cosmos:
+        image: mcr.microsoft.com/cosmosdb/linux/azure-cosmos-emulator@sha256:db53613dae19d0a3d5ad50688d14aa6e957af082dafea56b52e1bd3a6b3f1406
+        env:
+          PROTOCOL: http
+          ENABLE_EXPLORER: "false"
+          ENABLE_TELEMETRY: "false"
+        ports:
+          - 8081:8081
+          - 8082:8080
+      mailpit:
+        image: axllent/mailpit:v1.33.1
+        env:
+          MP_SMTP_AUTH_ACCEPT_ANY: "1"
+          MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+        ports:
+          - 1025:1025
+          - 8025:8025
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Sync
+        run: uv sync --locked
+      - name: Start Service Bus emulator on the service network
+        run: ./scripts/ci-emulators.sh start-servicebus "${{ job.services.mssql.network }}"
+      - name: Wait for emulators + SDK smoke
+        run: ./scripts/ci-emulators.sh wait
+      - name: Integration tests (emulators, fake LLM, Event Grid stub, Mailpit)
+        run: uv run pytest -m integration
+      - name: Container logs
+        if: failure()
+        run: ./scripts/ci-emulators.sh logs
 
-    tests-must-fail:
-        name: tests-must-fail
-        runs-on: ubuntu-24.04
-        timeout-minutes: 15
-        steps:
-            - uses: actions/checkout@v7
-              with:
-                  persist-credentials: false
-            - name: Install uv
-              run: pipx install "uv==${UV_VERSION}"
-            - name: Sync
-              run: uv sync --locked
-            - name: Every known-bad mutation must fail the unit tests
-              run: uv run python scripts/tests_must_fail.py
+  tests-must-fail:
+    name: tests-must-fail
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Sync
+        run: uv sync --locked
+      - name: Every known-bad mutation must fail the unit tests
+        run: uv run python scripts/tests_must_fail.py
+
+  iac-static:
+    name: iac-static
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Install Checkov and Conftest (versions pinned in scripts/iac.sh)
+        run: ./scripts/iac.sh install-tools
+      - name: fmt · validate · Checkov per root · policy unit tests
+        run: ./scripts/iac.sh static
+
+  iac-plan:
+    name: iac-plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      floci-az:
+        image: floci/floci-az:0.16.0
+        env:
+          FLOCI_AZ_TLS_ENABLED: "true"
+          FLOCI_AZ_SERVICES_FUNCTIONS_MOCKED: "true"
+        ports:
+          - 4577:4577
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false # keep `terraform show -json` output clean
+      - name: Install uv
+        run: pipx install "uv==${UV_VERSION}"
+      - name: Install Checkov and Conftest
+        run: ./scripts/iac.sh install-tools
+      - name: Wait for floci-az and trust its certificate
+        run: ./scripts/iac.sh wait-floci && ./scripts/trust-floci-cert.sh
+      - name: Full-stack plan vs floci-az -> Conftest gate -> every IaC mutation must be denied
+        run: ./scripts/iac.sh gate
