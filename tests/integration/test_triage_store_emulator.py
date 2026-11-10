@@ -33,3 +33,12 @@ def test_upsert_replaces_failed_record(store):
     store.upsert({"id": "T-2", "status": "failed"})
     store.upsert({"id": "T-2", "status": "triaged"})
     assert store.get("T-2")["status"] == "triaged"
+
+
+def test_mark_sets_fields_without_touching_others(store):
+    store.create({"id": "T-3", "status": "triaged", "priority": "high"})
+    store.mark("T-3", {"event_published_at": "2026-11-10T12:00:00+00:00"})
+    store.mark("T-3", {"notification": {"route": "escalation", "event_id": "T-3"}})
+    doc = store.get("T-3")
+    assert doc["priority"] == "high" and doc["event_published_at"] == "2026-11-10T12:00:00+00:00"
+    assert doc["notification"]["route"] == "escalation"

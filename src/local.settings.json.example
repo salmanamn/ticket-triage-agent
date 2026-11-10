@@ -23,6 +23,15 @@
     "TRIAGE_MAX_ATTEMPTS": "5",
     "TRIAGE_MAX_OUTPUT_TOKENS": "700",
     "OPENAI_TIMEOUT_SECONDS": "180",
+    "EVENTGRID_TOPIC_ENDPOINT": "http://127.0.0.1:6100/api/events",
+    "EVENTGRID_TOPIC_KEY": "local-stub-key-not-a-secret",
+    "EVENT_SOURCE": "/pearlpay/ticket-triage",
+    "EMAIL_TRANSPORT": "smtp",
+    "SMTP_HOST": "127.0.0.1",
+    "SMTP_PORT": "1025",
+    "EMAIL_SENDER": "triage-bot@pearlpay.example",
+    "ESCALATION_MAILBOX": "escalations@pearlpay.example",
+    "REVIEW_MAILBOX": "human-review@pearlpay.example",
     "AzureFunctionsJobHost__extensions__serviceBus__maxConcurrentCalls": "1"
   }
 }
