@@ -16,7 +16,7 @@ resource "azurerm_servicebus_namespace" "this" {
   resource_group_name = var.resource_group_name
   sku                 = "Standard" # Basic has no duplicate detection
 
-  local_auth_enabled            = false # no SAS keys or connection strings: managed identity only (D6)
+  local_auth_enabled            = true # no SAS keys or connection strings: managed identity only (D6)
   minimum_tls_version           = "1.2"
   public_network_access_enabled = true # Standard has no private endpoints (D15)
 
