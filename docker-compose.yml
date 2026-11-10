@@ -89,6 +89,21 @@ services:
       - "127.0.0.1:1025:1025"   # SMTP
       - "127.0.0.1:8025:8025"   # web UI
 
+  # IaC control plane only (Terraform envs/local, D18). Not part of the app's local runtime.
+  floci-az:
+    image: floci/floci-az:0.16.0
+    profiles: ["iac"]
+    container_name: triage-floci-az
+    restart: unless-stopped
+    environment:
+      FLOCI_AZ_TLS_ENABLED: "true"              # azurerm talks HTTPS only (scripts/trust-floci-cert.sh)
+      FLOCI_AZ_STORAGE_MODE: persistent
+      FLOCI_AZ_SERVICES_FUNCTIONS_MOCKED: "true" # never start Function containers (no docker.sock mounted)
+    volumes:
+      - ./data/floci:/app/data
+    ports:
+      - "127.0.0.1:4577:4577"   # ARM + data planes; same port as Project 1's floci-az: run one lab at a time
+
 volumes:
   cosmos-data:
   azurite-data:

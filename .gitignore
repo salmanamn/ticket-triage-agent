@@ -20,3 +20,5 @@ data/
 *.tfstate.*
 *.tfplan
 terraform.tfvars
+.terraform-validate/
+plan.json

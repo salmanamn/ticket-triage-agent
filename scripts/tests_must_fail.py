@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COPY = ("src", "tests", "scripts", "kb", "eval", "pyproject.toml")
+COPY = ("src", "tests", "scripts", "kb", "eval", "emulators", "infra", "pyproject.toml")
 SUMMARY = re.compile(r"(\d+) failed")
 
 
@@ -137,11 +137,27 @@ MUTATIONS = [
         "NO_RETRY = set()",
         "tests/unit/test_eventgrid_stub.py",
     ),
+    Mutation(
+        "terraform-vector-index-drift",
+        "infra/modules/cosmos/knowledge-container.json",
+        '"vectorIndexes": [{ "path": "/embedding", "type": "diskANN" }]',
+        '"vectorIndexes": [{ "path": "/embedding", "type": "flat" }]',
+        "tests/unit/test_infra_contract.py",
+    ),
+    Mutation(
+        "terraform-delivery-count-drift",
+        "infra/modules/stack/variables.tf",
+        'TRIAGE_MAX_ATTEMPTS (D11)"\n  type        = number\n  default     = 5\n',
+        'TRIAGE_MAX_ATTEMPTS (D11)"\n  type        = number\n  default     = 10\n',
+        "tests/unit/test_infra_contract.py",
+    ),
 ]
 
 
 def make_copy(dest: Path) -> None:
-    ignore = shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", "local.settings.json")
+    ignore = shutil.ignore_patterns(
+        "__pycache__", ".pytest_cache", "*.pyc", "local.settings.json", ".terraform*", "*.tfstate*", "*.tfplan"
+    )
     for name in COPY:
         src = ROOT / name
         if src.is_dir():

@@ -1,0 +1,26 @@
+Plan: 29 to add, 0 to change, 0 to destroy.
+38 tests, 38 passed, 0 warnings, 0 failures, 0 exceptions
+OK       baseline: 38 tests, 38 passed, 0 warnings, 0 failures, 0 exceptions
+DENIED   servicebus-sas-keys                  module.stack.module.messaging[0].azurerm_servicebus_namespace.this: Service Bus local (SAS) auth must be disabled
+DENIED   servicebus-basic-tier                module.stack.module.messaging[0].azurerm_servicebus_namespace.this: Basic tier has no duplicate detection (D8)
+DENIED   queue-no-duplicate-detection         module.stack.module.messaging[0].azurerm_servicebus_queue.tickets: duplicate detection must be on (MessageId = ticket_id, D8)
+DENIED   queue-delivery-count-drift           module.stack.module.messaging[0].azurerm_servicebus_queue.tickets: max_delivery_count must be 5 = TRIAGE_MAX_ATTEMPTS (D11)
+DENIED   cosmos-account-keys                  module.stack.module.cosmos[0].azurerm_cosmosdb_account.this: Cosmos DB key auth must be disabled (local_authentication_enabled = false)
+DENIED   cosmos-no-vector-search              module.stack.module.cosmos[0].azurerm_cosmosdb_account.this: capability EnableNoSQLVectorSearch is required (D2, D9)
+DENIED   knowledge-flat-index                 module.stack.module.cosmos[0].azurerm_resource_group_template_deployment.knowledge: knowledge needs /embedding float32 cosine with a diskANN index, excluded from the regular index (D9)
+DENIED   knowledge-embedding-indexed          module.stack.module.cosmos[0].azurerm_resource_group_template_deployment.knowledge: knowledge needs /embedding float32 cosine with a diskANN index, excluded from the regular index (D9)
+DENIED   eventgrid-topic-keys                 module.stack.module.events.azurerm_eventgrid_topic.this: Event Grid topic keys must be disabled
+DENIED   eventgrid-legacy-schema              module.stack.module.events.azurerm_eventgrid_topic.this: topic input schema must be CloudEvents 1.0 (D13)
+DENIED   notify-no-deadletter                 module.stack.module.events.azurerm_eventgrid_event_subscription.notify[0]: undeliverable events must be dead-lettered to blob (D16)
+DENIED   storage-shared-key                   module.stack.module.storage.azurerm_storage_account.this: storage Shared Key auth must be disabled
+DENIED   storage-public-blobs                 module.stack.module.storage.azurerm_storage_account.this: anonymous blob access must be disabled
+DENIED   function-basic-auth-publish          module.stack.module.functionapp[0].azurerm_function_app_flex_consumption.this: basic-auth publishing credentials must be disabled
+DENIED   function-storage-connection-string   module.stack.module.functionapp[0].azurerm_function_app_flex_consumption.this: deployment storage must use a managed identity, not a connection string
+DENIED   function-http-allowed                module.stack.module.functionapp[0].azurerm_function_app_flex_consumption.this: HTTPS only
+DENIED   appinsights-local-auth               module.stack.azurerm_application_insights.this[0]: Application Insights ingestion must require Entra ID
+DENIED   diagnostics-other-workspace          module.stack.module.cosmos[0].azurerm_monitor_diagnostic_setting.account[0]: diagnostics must go to log-slz-platform
+DENIED   diagnostics-missing                  module.stack.module.cosmos[0].azurerm_cosmosdb_account.this: no diagnostic setting in module.stack.module.cosmos[0]
+DENIED   role-owner                           module.stack.azurerm_role_assignment.app["appinsights"]: role /subscriptions/00000000-0000-0000-0000-000000000001/providers/Microsoft.Authorization/roleDefinitions/8e3af657-a8ff-443c-a75c-2fe8c4bcb635 is not on the data-plane allowlist
+DENIED   setting-connection-string            app setting ServiceBusConnection: credentials in app settings are not allowed; use identity-based settings
+DENIED   setting-api-key                      app setting OPENAI_API_KEY: credentials in app settings are not allowed; use identity-based settings
+22/22 mutations denied
