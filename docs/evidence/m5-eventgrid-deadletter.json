@@ -1,0 +1,23 @@
+{
+  "deadletterReason": "MaxDeliveryAttemptsExceeded",
+  "deliveryAttempts": 5,
+  "lastHttpStatus": 0,
+  "event": {
+    "id": "M5-E04-1",
+    "source": "/pearlpay/ticket-triage",
+    "data": {
+      "schema_version": 1,
+      "ticket_id": "M5-E04-1",
+      "category": "account_access",
+      "priority": "critical",
+      "injection_suspected": false,
+      "priority_floor_applied": false,
+      "triaged_at": "2026-11-10T15:47:37.879139Z"
+    },
+    "type": "Ticket.Triaged",
+    "time": "2026-11-10T15:47:37.879139Z",
+    "specversion": "1.0",
+    "datacontenttype": "application/json",
+    "subject": "tickets/M5-E04-1"
+  }
+}

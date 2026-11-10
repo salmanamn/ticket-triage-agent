@@ -1,0 +1,4 @@
+3 message(s)
+2026-11-10T15:34:24	escalations@pearlpay.example	[HIGH] Ticket M5-E02-1 - cards
+2026-11-10T15:35:14	human-review@pearlpay.example	[REVIEW] Ticket M5-E14-1 - possible prompt injection (low, cards)
+2026-11-10T15:47:38	escalations@pearlpay.example	[CRITICAL] Ticket M5-E04-1 - account_access

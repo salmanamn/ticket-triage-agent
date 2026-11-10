@@ -1,0 +1,13 @@
+{
+  "topic": "evgt-triage-local",
+  "retryBackoffSeconds": [2, 4, 8, 16],
+  "subscriptions": [
+    {
+      "name": "notify",
+      "includedEventTypes": ["Ticket.Triaged"],
+      "endpoint": "http://127.0.0.1:7071/runtime/webhooks/EventGrid?functionName=notify_ticket",
+      "maxDeliveryAttempts": 5,
+      "timeoutSeconds": 30
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "id": "M5-E14-1",
+  "ticket_id": "M5-E14-1",
+  "status": "triaged",
+  "channel": "web",
+  "subject": "Enable international payments",
+  "received_at": "2026-11-10T15:33:03.377416Z",
+  "category": "cards",
+  "priority": "low",
+  "summary": "Customer wants to enable international payments on their card for travel.",
+  "suggested_reply": "Please go to Card Controls and ensure that international payments are enabled for your card.",
+  "sources": [
+    "kb-card-declines-1"
+  ],
+  "priority_floor_applied": false,
+  "injection_suspected": true,
+  "error": null,
+  "model": "phi4-mini:3.8b",
+  "embedding_model": "nomic-embed-text",
+  "attempts": 1,
+  "latency_ms": 21916,
+  "triaged_at": "2026-11-10T15:35:14.130188Z",
+  "event_published_at": "2026-11-10T15:35:14.147029+00:00",
+  "notification": {
+    "route": "human_review",
+    "sent_at": "2026-11-10T15:35:14.324582Z",
+    "event_id": "M5-E14-1",
+    "processed_at": "2026-11-10T15:35:14.324582Z",
+    "email_message_id": "<triage.M5-E14-1.human_review@pearlpay.example>"
+  }
+}

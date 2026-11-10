@@ -99,3 +99,46 @@ def triage() -> TriageSettings:
         timeout_s=float(os.getenv("OPENAI_TIMEOUT_SECONDS", "180")),
         max_output_tokens=int(os.getenv("TRIAGE_MAX_OUTPUT_TOKENS", "700")),
     )
+
+
+@dataclass(frozen=True)
+class EventSettings:
+    topic_endpoint: (
+        str  # stub: http://127.0.0.1:6100/api/events; Azure: https://<topic>.<region>-1.eventgrid.azure.net/api/events
+    )
+    topic_key: str | None  # local stub only; Azure uses managed identity (EventGrid Data Sender), local auth disabled
+    source: str
+
+
+def events() -> EventSettings:
+    return EventSettings(
+        topic_endpoint=_require("EVENTGRID_TOPIC_ENDPOINT"),
+        topic_key=os.getenv("EVENTGRID_TOPIC_KEY"),
+        source=os.getenv("EVENT_SOURCE", "/pearlpay/ticket-triage"),
+    )
+
+
+@dataclass(frozen=True)
+class NotifySettings:
+    transport: str  # "smtp" (Mailpit locally). Azure Communication Services Email is added at M8.
+    smtp_host: str
+    smtp_port: int
+    smtp_starttls: bool
+    sender: str
+    escalation_mailbox: str  # High/Critical tickets
+    review_mailbox: str  # injection_suspected tickets (human review before any reply)
+
+
+def notify() -> NotifySettings:
+    transport = os.getenv("EMAIL_TRANSPORT", "smtp")
+    if transport != "smtp":
+        raise RuntimeError("EMAIL_TRANSPORT must be 'smtp' (ACS Email arrives at M8)")
+    return NotifySettings(
+        transport=transport,
+        smtp_host=os.getenv("SMTP_HOST", "127.0.0.1"),
+        smtp_port=int(os.getenv("SMTP_PORT", "1025")),
+        smtp_starttls=os.getenv("SMTP_STARTTLS", "false").lower() == "true",
+        sender=_require("EMAIL_SENDER"),
+        escalation_mailbox=_require("ESCALATION_MAILBOX"),
+        review_mailbox=_require("REVIEW_MAILBOX"),
+    )

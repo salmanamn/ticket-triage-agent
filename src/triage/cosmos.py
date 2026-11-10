@@ -86,3 +86,9 @@ class CosmosTriageStore:
 
     def upsert(self, doc: dict[str, Any]) -> None:
         self.container.upsert_item(doc)
+
+    def mark(self, ticket_id: str, fields: dict[str, Any]) -> None:
+        """Set top-level fields with a partial update (patch), so concurrent writers never overwrite each other's
+        fields. Values must be JSON-ready (use model_dump(mode="json"))."""
+        ops = [{"op": "set", "path": f"/{name}", "value": value} for name, value in fields.items()]
+        self.container.patch_item(item=ticket_id, partition_key=ticket_id, patch_operations=ops)

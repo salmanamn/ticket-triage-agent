@@ -91,8 +91,23 @@ class RetrievedRef(BaseModel):
     score: float
 
 
+NotifyRoute = Literal["escalation", "human_review", "none"]
+
+
+class NotificationRecord(BaseModel):
+    """What the notify step did for a ticket. Its presence means the Ticket.Triaged event was handled."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    route: NotifyRoute
+    event_id: str
+    email_message_id: str | None = None
+    sent_at: datetime | None = None
+    processed_at: datetime
+
+
 class TriageRecord(BaseModel):
-    """Document in the Cosmos `triage` container (id = ticket_id). Contract for the notify step at M5."""
+    """Document in the Cosmos `triage` container (id = ticket_id). Also the contract read by the notify step."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -110,11 +125,31 @@ class TriageRecord(BaseModel):
     suggested_reply: str | None = None
     sources: list[str] = Field(default_factory=list)
     priority_floor_applied: bool = False
-    injection_suspected: bool = False  # notify step (M5) routes these to human review
+    injection_suspected: bool = False  # notify routes these to human review
     error: str | None = None
     model: str
     embedding_model: str
     retrieved: list[RetrievedRef] = Field(default_factory=list)
     attempts: int
     latency_ms: int
+    triaged_at: datetime
+    event_published_at: datetime | None = None  # set by EventRelay once Event Grid accepted Ticket.Triaged
+    notification: NotificationRecord | None = None  # set by the notify function (idempotency marker)
+
+
+TICKET_TRIAGED = "Ticket.Triaged"
+
+
+class TicketTriagedData(BaseModel):
+    """CloudEvent `data` for Ticket.Triaged. Thin by design: no customer email, subject, body or model text.
+    Consumers read the full record from Cosmos by ticket_id (claim check)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    ticket_id: str = Field(pattern=TICKET_ID_PATTERN)
+    category: Category
+    priority: Priority
+    injection_suspected: bool
+    priority_floor_applied: bool
     triaged_at: datetime
