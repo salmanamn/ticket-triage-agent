@@ -25,7 +25,7 @@ package = false
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
-markers = ["integration: needs the local emulators (docker compose up -d)"]
+markers = ["integration: needs Service Bus, Cosmos and Mailpit (docker compose --profile notify up -d)"]
 addopts = "-ra --strict-markers"
 
 [tool.ruff]
