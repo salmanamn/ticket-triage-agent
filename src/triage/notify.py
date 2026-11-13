@@ -8,6 +8,7 @@ with the same Message-ID). Customer-controlled text never goes into a mail heade
 
 import logging
 import smtplib
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import EmailMessage
@@ -43,7 +44,7 @@ class NotifyStore(Protocol):
 
 
 class SmtpMailer:
-    """Mailpit locally (no auth, no TLS). ACS Email replaces this on Azure at M8."""
+    """Mailpit locally (no auth, no TLS). AcsMailer on Azure."""
 
     def __init__(self, host: str, port: int, starttls: bool = False, timeout_s: float = 10):
         self.host, self.port, self.starttls, self.timeout_s = host, port, starttls, timeout_s
@@ -53,6 +54,58 @@ class SmtpMailer:
             if self.starttls:
                 smtp.starttls()
             smtp.send_message(message)
+
+
+# Headers ACS Email may carry from our message. Everything else (From, To, Subject, Date, Message-ID) is set by ACS
+# from the request fields; only these two custom headers are passed through, and both come from validated ids/enums.
+ACS_PASSTHROUGH_HEADERS = ("X-Ticket-Id", "X-Triage-Route")
+ACS_OPERATION_NAMESPACE = uuid.UUID("6f1d5c3e-8a7b-4e2f-9c1d-3b5a7e9f0a21")
+
+
+def acs_operation_id(message_id: str) -> str:
+    """Stable per Message-ID (ticket + route): a repeated send reuses the ACS Operation-Id instead of a new one."""
+    return str(uuid.uuid5(ACS_OPERATION_NAMESPACE, message_id))
+
+
+def acs_payload(message: EmailMessage) -> dict[str, Any]:
+    """EmailMessage (built by build_email) -> ACS Email send request. Plain text only, like the SMTP path."""
+    return {
+        "senderAddress": str(message["From"]),
+        "recipients": {"to": [{"address": str(message["To"])}]},
+        "content": {"subject": str(message["Subject"]), "plainText": message.get_content()},
+        "headers": {name: str(message[name]) for name in ACS_PASSTHROUGH_HEADERS if message[name]},
+        "userEngagementTrackingDisabled": True,
+    }
+
+
+class AcsMailer:
+    """Azure Communication Services Email with Entra ID (the app's user-assigned identity, D20).
+
+    `begin_send` without polling: the 202 means ACS queued the message; delivery shows up in the ACSEmail* logs.
+    The Operation-Id is derived from the Message-ID, so a retried send after a crash is the same operation; ACS
+    answers a reused id with 409, which counts as already queued.
+    """
+
+    def __init__(self, client: Any):
+        self._client = client
+
+    @classmethod
+    def from_endpoint(cls, endpoint: str) -> "AcsMailer":
+        from azure.communication.email import EmailClient
+        from azure.identity import DefaultAzureCredential  # honours AZURE_CLIENT_ID (user-assigned identity)
+
+        return cls(EmailClient(endpoint, DefaultAzureCredential()))
+
+    def send(self, message: EmailMessage) -> None:
+        from azure.core.exceptions import HttpResponseError
+
+        operation_id = acs_operation_id(message["Message-ID"])
+        try:
+            self._client.begin_send(acs_payload(message), operation_id=operation_id, polling=False)
+        except HttpResponseError as exc:
+            if exc.status_code != 409:
+                raise
+            log.info("ACS operation %s already exists; treating the email as queued", operation_id)
 
 
 @dataclass(frozen=True)

@@ -1,11 +1,17 @@
+import uuid
+
 import pytest
+from azure.core.exceptions import HttpResponseError
 
 from triage.events import triaged_event
 from triage.notify import (
+    AcsMailer,
     InvalidEvent,
     Mailboxes,
     Notifier,
     RecordNotFound,
+    acs_operation_id,
+    acs_payload,
     build_email,
     email_message_id,
     route_for,
@@ -124,3 +130,64 @@ def test_customer_text_never_reaches_mail_headers():
     msg = build_email(hostile, "escalation", BOXES)
     assert "evil" not in str(msg["Subject"]) and msg["Bcc"] is None
     assert "attacker@evil.example" in msg.get_content()  # kept in the body, labelled untrusted
+
+
+# --- ACS Email (Azure, D20) --------------------------------------------------------------------------------------
+
+
+class FakeAcsClient:
+    def __init__(self, status=None):
+        self.calls, self.status = [], status
+
+    def begin_send(self, message, *, operation_id, polling):
+        self.calls.append({"message": message, "operation_id": operation_id, "polling": polling})
+        if self.status:
+            err = HttpResponseError(message=f"HTTP {self.status}")
+            err.status_code = self.status
+            raise err
+
+
+def test_acs_payload_carries_the_built_email_and_only_safe_headers():
+    hostile = record(priority="high", subject="Help\r\nBcc: attacker@evil.example")
+    msg = build_email(hostile, "escalation", BOXES)
+    payload = acs_payload(msg)
+    assert payload["senderAddress"] == BOXES.sender
+    assert payload["recipients"] == {"to": [{"address": BOXES.escalation}]}
+    assert payload["content"]["subject"] == str(msg["Subject"]) and "evil" not in payload["content"]["subject"]
+    assert payload["content"]["plainText"] == msg.get_content()
+    assert payload["headers"] == {"X-Ticket-Id": hostile.ticket_id, "X-Triage-Route": "escalation"}
+    assert payload["userEngagementTrackingDisabled"] is True
+
+
+def test_acs_operation_id_is_stable_per_ticket_and_route():
+    rec = record(priority="high")
+    first = acs_operation_id(email_message_id(rec.ticket_id, "escalation"))
+    assert first == acs_operation_id(email_message_id(rec.ticket_id, "escalation"))
+    assert first != acs_operation_id(email_message_id(rec.ticket_id, "human_review"))
+    assert str(uuid.UUID(first)) == first
+
+
+def test_acs_mailer_queues_without_polling():
+    client = FakeAcsClient()
+    msg = build_email(record(priority="high"), "escalation", BOXES)
+    AcsMailer(client).send(msg)
+    (call,) = client.calls
+    assert call["polling"] is False
+    assert call["operation_id"] == acs_operation_id(msg["Message-ID"])
+
+
+def test_acs_conflict_means_already_queued():
+    AcsMailer(FakeAcsClient(status=409)).send(build_email(record(priority="high"), "escalation", BOXES))
+
+
+def test_acs_other_errors_raise_for_event_grid_retry():
+    with pytest.raises(HttpResponseError):
+        AcsMailer(FakeAcsClient(status=500)).send(build_email(record(priority="high"), "escalation", BOXES))
+
+
+def test_notifier_with_acs_sends_once_and_marks_record():
+    client = FakeAcsClient()
+    outcome, store, _ = run(record(priority="critical"), mailer=AcsMailer(client))
+    assert outcome.status == "notified" and len(client.calls) == 1
+    rec_id = next(iter(store.docs))
+    assert store.docs[rec_id]["notification"]["route"] == "escalation"

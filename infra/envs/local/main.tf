@@ -25,6 +25,13 @@ module "stack" {
     eventgrid    = var.full_stack
     function_app = var.full_stack
     rbac         = var.full_stack
+    openai       = var.full_stack
+    email        = var.full_stack
+  }
+
+  notify_mailboxes = {
+    escalation = "escalations@pearlpay.example"
+    review     = "human-review@pearlpay.example"
   }
 
   # floci-az has WebHook destinations only, and azurerm accepts https webhooks only. The local Functions host

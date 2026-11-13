@@ -1,0 +1,1 @@
+{"checks":["lint","unit","integration","tests-must-fail","iac-static","iac-plan"],"enforce_admins":true,"linear_history":true,"pr_required":true,"strict":true}

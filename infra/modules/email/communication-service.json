@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "name": { "type": "string" },
+    "dataLocation": { "type": "string" },
+    "domainId": { "type": "string" },
+    "tags": { "type": "object", "defaultValue": {} }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2025-05-01",
+      "name": "[parameters('name')]",
+      "location": "global",
+      "tags": "[parameters('tags')]",
+      "properties": {
+        "dataLocation": "[parameters('dataLocation')]",
+        "disableLocalAuth": true,
+        "publicNetworkAccess": "Enabled",
+        "linkedDomains": ["[parameters('domainId')]"]
+      }
+    }
+  ],
+  "outputs": {
+    "id": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('name'))]"
+    },
+    "hostName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Communication/communicationServices', parameters('name')), '2025-05-01').hostName]"
+    }
+  }
+}

@@ -22,3 +22,5 @@ data/
 terraform.tfvars
 .terraform-validate/
 plan.json
+# Azure (M8): laptop settings for the deployed stack (endpoints only, but per deployment)
+src/azure.settings.json

@@ -64,6 +64,33 @@ def add_setting(name: str) -> Callable[[dict], None]:
     return run
 
 
+def acs_local_auth_on(plan: dict) -> None:
+    for rc in plan["resource_changes"]:
+        content = (rc["change"]["after"] or {}).get("template_content") or ""
+        if "Microsoft.Communication/communicationServices" in content:
+            if '"disableLocalAuth":true' not in content:
+                raise LookupError("disableLocalAuth in the ACS template")
+            rc["change"]["after"]["template_content"] = content.replace(
+                '"disableLocalAuth":true', '"disableLocalAuth":false'
+            )
+            return
+    raise LookupError("ACS template deployment")
+
+
+def openai_subdomain_removed(plan: dict) -> None:
+    """As if custom_subdomain_name were deleted from the module: null and no longer 'known after apply'."""
+    for rc in plan["resource_changes"]:
+        if rc["type"] == "azurerm_cognitive_account" and rc["change"]["after"] is not None:
+            rc["change"]["after"]["custom_subdomain_name"] = None
+            rc["change"].get("after_unknown", {}).pop("custom_subdomain_name", None)
+            return
+    raise LookupError("azurerm_cognitive_account")
+
+
+def provisioned_sku(after: dict) -> None:
+    after["sku"][0]["name"] = "GlobalProvisionedManaged"
+
+
 def role_to_owner(after: dict) -> None:
     after["role_definition_id"] = after["role_definition_id"].rsplit("/", 1)[0] + "/" + OWNER
 
@@ -115,6 +142,11 @@ MUTATIONS = [
     ),
     Mutation("diagnostics-missing", "<plan>", drop_cosmos_diagnostics),
     Mutation("role-owner", "azurerm_role_assignment", role_to_owner),
+    Mutation("openai-api-keys", "azurerm_cognitive_account", setter("local_auth_enabled", True)),
+    Mutation("openai-no-subdomain", "<plan>", openai_subdomain_removed),
+    Mutation("openai-provisioned-throughput", "azurerm_cognitive_deployment", provisioned_sku),
+    Mutation("acs-access-keys", "<plan>", acs_local_auth_on),
+    Mutation("role-to-user", "azurerm_role_assignment", setter("principal_type", "User")),
     Mutation("setting-connection-string", "<plan>", add_setting("ServiceBusConnection")),
     Mutation("setting-api-key", "<plan>", add_setting("OPENAI_API_KEY")),
 ]

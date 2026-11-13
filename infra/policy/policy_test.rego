@@ -20,6 +20,11 @@ knowledge_template := {"resources": [{
 	}},
 }]}
 
+acs_template := {"resources": [{
+	"type": "Microsoft.Communication/communicationServices",
+	"properties": {"dataLocation": "UAE", "disableLocalAuth": true},
+}]}
+
 rc(module, type, name, after) := {
 	"address": sprintf("%s.%s.%s", [module, type, name]),
 	"module_address": module,
@@ -64,6 +69,12 @@ good_resources := [
 	diag("module.func"),
 	rc("module.stack", "azurerm_application_insights", "this", {"local_authentication_enabled": false, "workspace_id": ws}),
 	rc("module.stack", "azurerm_role_assignment", "app", {"role_definition_id": role("69a216fc-b8fb-44d8-bc22-1f3c2cd27a39"), "principal_type": "ServicePrincipal"}),
+	rc("module.oai", "azurerm_cognitive_account", "this", {"local_auth_enabled": false, "custom_subdomain_name": "oai-x"}),
+	diag("module.oai"),
+	rc("module.email", "azurerm_resource_group_template_deployment", "communication", {"template_content": json.marshal(acs_template)}),
+	diag("module.email"),
+	rc("module.stack", "azurerm_role_assignment", "operator_openai", {"role_definition_id": role("5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"), "principal_type": "User"}),
+	rc("module.oai", "azurerm_cognitive_deployment", "chat", {"sku": [{"name": "GlobalStandard", "capacity": 50}]}),
 ]
 
 plan_of(resources, settings) := {
@@ -162,4 +173,34 @@ test_connection_string_setting_fails if {
 
 test_key_named_setting_fails if {
 	count(deny) == 1 with input as plan_of(good_resources, ["OPENAI_API_KEY"])
+}
+test_openai_keys_fail if {
+	count(deny) == 1 with input as patched(16, "local_auth_enabled", true)
+}
+
+test_openai_without_subdomain_fails if {
+	count(deny) == 1 with input as patched(16, "custom_subdomain_name", null)
+}
+
+test_acs_keys_fail if {
+	bad := json.patch(acs_template, [{"op": "replace", "path": "/resources/0/properties/disableLocalAuth", "value": false}])
+	count(deny) == 1 with input as patched(18, "template_content", json.marshal(bad))
+}
+
+test_acs_without_diagnostics_fails if {
+	without := [r | some i, r in good_resources; i != 19]
+	count(deny) == 1 with input as plan_of(without, good.output_changes.summary.after.app_setting_names)
+}
+
+test_azurerm_communication_service_denied if {
+	extra := array.concat(good_resources, [rc("module.email", "azurerm_communication_service", "this", {"data_location": "UAE"})])
+	count(deny) == 1 with input as plan_of(extra, good.output_changes.summary.after.app_setting_names)
+}
+
+test_operator_with_data_owner_role_fails if {
+	count(deny) == 1 with input as patched(20, "role_definition_id", role("b7e6dc6d-f1e8-4753-8033-0f276bb0955b"))
+}
+
+test_provisioned_deployment_fails if {
+	count(deny) == 1 with input as patched(21, "sku", [{"name": "GlobalProvisionedManaged", "capacity": 15}])
 }

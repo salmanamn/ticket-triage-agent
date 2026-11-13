@@ -139,3 +139,11 @@ deny contains msg if {
 	not rc.change.after.site_config[0].minimum_tls_version == "1.2"
 	msg := sprintf("%s: minimum TLS must be 1.2", [rc.address])
 }
+# --- Azure OpenAI: pay-per-token only ---------------------------------------------------------
+
+deny contains msg if {
+	some rc in resources("azurerm_cognitive_deployment")
+	some sku in rc.change.after.sku
+	contains(sku.name, "Provisioned")
+	msg := sprintf("%s: provisioned throughput (%s) is billed per hour whether used or not; use a Standard SKU", [rc.address, sku.name])
+}

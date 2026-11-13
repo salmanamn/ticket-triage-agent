@@ -2,6 +2,7 @@
 # Terraform helpers. CI (.github/workflows/ci.yml) runs the same commands as the laptop.
 #
 #   install-tools   CI only (Linux x86_64): Checkov via uv, Conftest from its GitHub release
+#   install-conftest  CI only: Conftest alone (deploy.yml gates the real Azure plan)
 #   static          fmt · validate (both envs) · Checkov per root · Conftest policy unit tests   (CI: iac-static)
 #   wait-floci      wait until floci-az serves its TLS certificate
 #   gate            full-stack plan of envs/local against floci-az -> Conftest -> iac_must_fail  (CI: iac-plan)
@@ -19,11 +20,16 @@ AZURE=infra/envs/azure
 POLICY=infra/policy
 export TF_IN_AUTOMATION=1 CHECKPOINT_DISABLE=1
 
-install_tools() {
-  uv tool install --quiet "checkov==${CHECKOV_VERSION}"
+install_conftest() {
   curl -sSfL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" |
     sudo tar -xz -C /usr/local/bin conftest
-  checkov --version && conftest --version | head -1
+  conftest --version | head -1
+}
+
+install_tools() {
+  uv tool install --quiet "checkov==${CHECKOV_VERSION}"
+  install_conftest
+  checkov --version
 }
 
 # envs/local has no backend: its init downloads the providers once; later runs reuse them (no registry access).
@@ -118,11 +124,12 @@ plan_azure() {
 
 case "${1:-}" in
   install-tools) install_tools ;;
+  install-conftest) install_conftest ;;
   static) static ;;
   wait-floci) wait_floci ;;
   gate) gate ;;
   apply-local) apply_local ;;
   destroy-local) destroy_local ;;
   plan-azure) plan_azure ;;
-  *) echo "usage: $0 install-tools | static | wait-floci | gate | apply-local | destroy-local | plan-azure" >&2; exit 2 ;;
+  *) echo "usage: $0 install-tools | install-conftest | static | wait-floci | gate | apply-local | destroy-local | plan-azure" >&2; exit 2 ;;
 esac

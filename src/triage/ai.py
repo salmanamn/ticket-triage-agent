@@ -65,22 +65,39 @@ class OpenAIEmbedder:
 
 
 class OpenAIChatModel:
-    """Structured JSON via `response_format=json_schema` (Ollama: grammar-constrained; Azure OpenAI: strict)."""
+    """Structured JSON via `response_format=json_schema` (Ollama: grammar-constrained; Azure OpenAI: strict).
 
-    def __init__(self, model: str, client: OpenAI | None = None, timeout_s: float = 180.0, max_tokens: int = 700):
+    Classic chat models (Ollama locally) get `temperature` + `max_tokens`. Reasoning models (Azure gpt-5.x, D19) reject
+    both: with `reasoning_effort` set they get `reasoning_effort` + `max_completion_tokens` (which also counts the
+    hidden reasoning tokens) and no temperature, so the first-attempt/redelivery temperature has no effect there.
+    """
+
+    def __init__(
+        self,
+        model: str,
+        client: OpenAI | None = None,
+        timeout_s: float = 180.0,
+        max_tokens: int = 700,
+        reasoning_effort: str | None = None,
+    ):
         self.model = model
         self._client = client or openai_client()
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens
+        self.reasoning_effort = reasoning_effort
+
+    def sampling_args(self, temperature: float) -> dict[str, Any]:
+        if self.reasoning_effort:
+            return {"reasoning_effort": self.reasoning_effort, "max_completion_tokens": self.max_tokens}
+        return {"temperature": temperature, "max_tokens": self.max_tokens}
 
     def complete_json(self, *, system: str, user: str, schema: dict[str, Any], name: str, temperature: float) -> str:
         resp = self._client.chat.completions.create(
             model=self.model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             response_format={"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
-            temperature=temperature,
-            max_tokens=self.max_tokens,
             timeout=self.timeout_s,
+            **self.sampling_args(temperature),
         )
         choice = resp.choices[0]
         if choice.finish_reason == "length":

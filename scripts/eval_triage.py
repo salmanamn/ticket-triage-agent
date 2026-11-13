@@ -47,7 +47,12 @@ def main() -> None:
     cfg = settings.triage()
 
     embedder = OpenAIEmbedder()
-    chat = OpenAIChatModel(cfg.chat_model, timeout_s=cfg.timeout_s, max_tokens=cfg.max_output_tokens)
+    chat = OpenAIChatModel(
+        cfg.chat_model,
+        timeout_s=cfg.timeout_s,
+        max_tokens=cfg.max_output_tokens,
+        reasoning_effort=cfg.reasoning_effort,
+    )
     triager = Triager(
         retriever=Retriever(cosmos.kb_container(), embedder),
         chat=chat,
