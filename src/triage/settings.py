@@ -83,6 +83,7 @@ def cosmos() -> CosmosSettings:
 @dataclass(frozen=True)
 class TriageSettings:
     chat_model: str  # Ollama model tag locally, Azure OpenAI deployment name on Azure
+    reasoning_effort: str | None  # set for reasoning models (Azure gpt-5.x): no temperature, max_completion_tokens
     kb_k: int
     ticket_k: int
     max_attempts: int  # must equal the queue's MaxDeliveryCount
@@ -93,6 +94,7 @@ class TriageSettings:
 def triage() -> TriageSettings:
     return TriageSettings(
         chat_model=_require("CHAT_MODEL"),
+        reasoning_effort=os.getenv("CHAT_REASONING_EFFORT") or None,
         kb_k=int(os.getenv("TRIAGE_KB_K", "3")),
         ticket_k=int(os.getenv("TRIAGE_TICKET_K", "3")),
         max_attempts=int(os.getenv("TRIAGE_MAX_ATTEMPTS", "5")),
@@ -120,10 +122,11 @@ def events() -> EventSettings:
 
 @dataclass(frozen=True)
 class NotifySettings:
-    transport: str  # "smtp" (Mailpit locally). Azure Communication Services Email is added at M8.
+    transport: str  # "smtp" (Mailpit locally) | "acs" (Azure Communication Services Email, managed identity)
     smtp_host: str
     smtp_port: int
     smtp_starttls: bool
+    acs_endpoint: str | None  # https://<resource>.<geo>.communication.azure.com (acs only)
     sender: str
     escalation_mailbox: str  # High/Critical tickets
     review_mailbox: str  # injection_suspected tickets (human review before any reply)
@@ -131,13 +134,14 @@ class NotifySettings:
 
 def notify() -> NotifySettings:
     transport = os.getenv("EMAIL_TRANSPORT", "smtp")
-    if transport != "smtp":
-        raise RuntimeError("EMAIL_TRANSPORT must be 'smtp' (ACS Email arrives at M8)")
+    if transport not in ("smtp", "acs"):
+        raise RuntimeError("EMAIL_TRANSPORT must be 'smtp' or 'acs'")
     return NotifySettings(
         transport=transport,
         smtp_host=os.getenv("SMTP_HOST", "127.0.0.1"),
         smtp_port=int(os.getenv("SMTP_PORT", "1025")),
         smtp_starttls=os.getenv("SMTP_STARTTLS", "false").lower() == "true",
+        acs_endpoint=_require("ACS_ENDPOINT") if transport == "acs" else None,
         sender=_require("EMAIL_SENDER"),
         escalation_mailbox=_require("ESCALATION_MAILBOX"),
         review_mailbox=_require("REVIEW_MAILBOX"),

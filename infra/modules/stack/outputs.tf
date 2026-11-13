@@ -39,3 +39,16 @@ output "function_app_hostname" {
 output "app_setting_names" {
   value = var.components.function_app ? module.functionapp[0].app_setting_names : sort(keys(local.app_settings))
 }
+
+output "openai_base_url" {
+  value = try(module.openai[0].base_url, null)
+}
+
+output "email_sender" {
+  value = try(module.email[0].sender_address, null)
+}
+
+# Non-secret settings for the laptop scripts (scripts/azure_settings.py -> src/azure.settings.json).
+output "client_settings" {
+  value = local.client_settings
+}

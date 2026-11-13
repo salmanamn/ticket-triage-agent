@@ -18,6 +18,7 @@
     "COSMOS_KB_CONTAINER": "knowledge",
     "COSMOS_TRIAGE_CONTAINER": "triage",
     "CHAT_MODEL": "phi4-mini:3.8b",
+    "CHAT_REASONING_EFFORT": "",
     "TRIAGE_KB_K": "3",
     "TRIAGE_TICKET_K": "3",
     "TRIAGE_MAX_ATTEMPTS": "5",

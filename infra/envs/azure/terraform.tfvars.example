@@ -1,3 +1,10 @@
 # cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is gitignored)
-subscription_id = "00000000-0000-0000-0000-000000000000" # az account show --query id -o tsv
-location        = "uaenorth"
+subscription_id    = "00000000-0000-0000-0000-000000000000" # az account show --query id -o tsv
+location           = "uaenorth"
+operator_object_id = "" # az ad signed-in-user show --query id -o tsv
+
+# Mailboxes you can read (plus-addressing works on most providers). Never commit terraform.tfvars.
+notify_mailboxes = {
+  escalation = "you+triage-escalations@example.com"
+  review     = "you+triage-review@example.com"
+}

@@ -3,14 +3,18 @@
 # requires-python = ">=3.13"
 # dependencies = []
 # ///
-"""POST an eval case to the local ingest API (Functions host on :7071) with a fresh ticket id.
+"""POST an eval case to the ingest API with a fresh ticket id.
 
-Usage: submit_case.py <case_id> [--cases eval/tickets.jsonl] [--id <ticket_id>]
+Local (default): the Functions host on :7071. Azure: --url https://<app>.azurewebsites.net/api/tickets and the
+function key in FUNCTION_KEY (sent as x-functions-key; never on the command line, so it stays out of shell history).
+
+Usage: submit_case.py <case_id> [--cases eval/tickets.jsonl] [--id <ticket_id>] [--url <ingest url>]
 Default ticket id: M5-<case_id>-<HHMMSS> (new id each run, so broker duplicate detection doesn't drop it).
 """
 
 import argparse
 import json
+import os
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -36,9 +40,12 @@ payload = {
     "body": case["body"],
     "channel": "web",
 }
-req = urllib.request.Request(  # noqa: S310 - local URL
-    args.url, data=json.dumps(payload).encode(), method="POST", headers={"Content-Type": "application/json"}
-)
+headers = {"Content-Type": "application/json"}
+if os.environ.get("FUNCTION_KEY"):
+    headers["x-functions-key"] = os.environ["FUNCTION_KEY"]
+elif not args.url.startswith("http://127.0.0.1"):
+    raise SystemExit("set FUNCTION_KEY for a non-local URL")
+req = urllib.request.Request(args.url, data=json.dumps(payload).encode(), method="POST", headers=headers)  # noqa: S310
 try:
     with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
         status, body = resp.status, resp.read().decode()

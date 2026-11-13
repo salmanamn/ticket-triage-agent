@@ -36,6 +36,8 @@ variable "components" {
     eventgrid    = optional(bool, true) # Microsoft.EventGrid topics + subscriptions
     function_app = optional(bool, true) # Microsoft.Web/serverfarms (FC1) + sites + Microsoft.Insights/components
     rbac         = optional(bool, true) # Microsoft.Authorization/roleAssignments + Cosmos sqlRoleAssignments
+    openai       = optional(bool, true) # Microsoft.CognitiveServices accounts + deployments
+    email        = optional(bool, true) # Microsoft.Communication email service, domain, communication service
   })
   default = {}
 }
@@ -69,8 +71,79 @@ variable "function_maximum_instance_count" {
   default = 10
 }
 
+variable "chat_deployment" {
+  description = "Azure OpenAI chat deployment (D19). gpt-5.4-mini: GA, Global Standard in uaenorth, strict structured outputs."
+  type = object({
+    model    = string
+    version  = string
+    sku      = string
+    capacity = number
+  })
+  default = {
+    model    = "gpt-5.4-mini"
+    version  = "2026-03-17"
+    sku      = "GlobalStandard"
+    capacity = 50
+  }
+}
+
+variable "chat_reasoning_effort" {
+  description = "reasoning_effort for the chat model; empty for a classic (non-reasoning) model (D19)"
+  type        = string
+  default     = "low"
+}
+
+variable "chat_max_output_tokens" {
+  description = "max_completion_tokens for a reasoning model: hidden reasoning tokens count against it"
+  type        = number
+  default     = 4000
+}
+
+variable "embedding_deployment" {
+  description = "Azure OpenAI embedding deployment; asked for embedding_dimensions-sized vectors (D9)"
+  type = object({
+    model    = string
+    version  = string
+    sku      = string
+    capacity = number
+  })
+  default = {
+    model    = "text-embedding-3-small"
+    version  = "1"
+    sku      = "Standard"
+    capacity = 50
+  }
+}
+
+variable "email_data_location" {
+  description = "ACS data location (data at rest)"
+  type        = string
+  default     = "UAE"
+}
+
+variable "notify_mailboxes" {
+  description = "Where notify_ticket sends mail on Azure: High/Critical escalations and injection reviews"
+  type = object({
+    escalation = string
+    review     = string
+  })
+  sensitive = true
+}
+
+variable "email_sender_role_definition_id" {
+  description = "Custom role 'SLZ Email Sender' (Project 1 bootstrap): send email through ACS with Entra ID (D20)"
+  type        = string
+  default     = "fca60e2f-9abf-5087-a329-0814cea30909"
+}
+
+variable "operator_object_id" {
+  description = "Entra object id of the human operator: data roles to seed the KB and read records from the laptop (D21). Empty = none."
+  type        = string
+  default     = ""
+}
+
 variable "extra_app_settings" {
-  description = "More app settings (M8: model endpoints and email). Names/endpoints only, no secrets."
+  description = "More app settings. Names/endpoints only, no secrets."
   type        = map(string)
   default     = {}
 }

@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Event-driven support-ticket triage agent"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    "azure-communication-email==1.1.0",
     "azure-cosmos==4.17.1",
     "azure-eventgrid==4.22.1",
     "azure-functions==2.3.0",

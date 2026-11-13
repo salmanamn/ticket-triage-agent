@@ -23,6 +23,8 @@ provider "azurerm" {
   resource_provider_registrations = "none"
   resource_providers_to_register = [
     "Microsoft.Authorization",
+    "Microsoft.CognitiveServices",
+    "Microsoft.Communication",
     "Microsoft.DocumentDB",
     "Microsoft.EventGrid",
     "Microsoft.Insights",
@@ -47,7 +49,15 @@ provider "azurerm" {
     }
 
     template_deployment {
-      delete_nested_items_during_deletion = true # destroy removes the knowledge container (D17)
+      delete_nested_items_during_deletion = true # destroy removes the knowledge container (D17) and ACS (D20)
+    }
+
+    application_insights {
+      disable_generated_rule = true # Azure's "Failure Anomalies" rule: disabled on create, deleted on destroy (D22)
+    }
+
+    cognitive_account {
+      purge_soft_delete_on_destroy = true # a soft-deleted account keeps its name (and quota) for 48 h otherwise
     }
   }
 }

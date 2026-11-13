@@ -1,4 +1,4 @@
-"""Print a triage record from Cosmos (local emulator).
+"""Print a triage record from Cosmos (local emulator, or Azure with TRIAGE_SETTINGS=src/azure.settings.json).
 
 Usage: PYTHONPATH=src uv run python scripts/show_triage.py <ticket_id> [--full]
 """

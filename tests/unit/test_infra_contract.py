@@ -59,3 +59,12 @@ def test_max_delivery_count_matches_emulator_and_app():
     local = json.loads((ROOT / "src" / "local.settings.json.example").read_text())["Values"]
     assert int(tf_default("max_delivery_count")) == queue["Properties"]["MaxDeliveryCount"]
     assert int(tf_default("max_delivery_count")) == int(local["TRIAGE_MAX_ATTEMPTS"])
+
+
+def test_every_required_setting_is_an_azure_app_setting():
+    """A setting the code _require()s but the stack doesn't set crashes the Function on Azure (not locally)."""
+    required = set(re.findall(r'_require\("(\w+)"\)', (ROOT / "src" / "triage" / "settings.py").read_text()))
+    stack = (ROOT / "infra" / "modules" / "stack" / "main.tf").read_text()
+    set_by_stack = set(re.findall(r"^\s*(\w+)\s+=", stack, re.MULTILINE))
+    assert {"OPENAI_BASE_URL", "ACS_ENDPOINT", "REVIEW_MAILBOX"} <= required  # the regex still finds them
+    assert required - set_by_stack == set()

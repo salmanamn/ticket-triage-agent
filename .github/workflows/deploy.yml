@@ -1,0 +1,197 @@
+name: deploy
+
+# Real Azure stack (infra/envs/azure) through GitHub OIDC, modelled on secure-landing-zone's deploy.yml (D21):
+#   pull_request  -> plan (id-slz-plan) + Conftest gate on that exact plan + summary. Not a required check.
+#   dispatch      -> apply | destroy: plan -> gate -> encrypted artifact -> approval (environment azure) ->
+#                    terraform apply of that exact plan (id-slz-apply)
+#                 -> deploy-code: approval -> package src/ -> Flex Consumption remote build (id-slz-apply)
+on:
+    pull_request:
+        branches: [main]
+        paths:
+            - "infra/**"
+            - "src/**"
+            - ".github/workflows/deploy.yml"
+            - "scripts/deploy-code.sh"
+            - "scripts/az-login-oidc.sh"
+    workflow_dispatch:
+        inputs:
+            action:
+                description: "What to do to the Azure lab"
+                type: choice
+                options: [apply, destroy, deploy-code]
+                default: apply
+            notify:
+                description: "Create the Event Grid notify subscription (only once deploy-code has run)"
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+
+concurrency:
+    group: tfstate-ticket-triage-azure
+    cancel-in-progress: false
+
+env:
+    TF_VERSION: "1.17.1"
+    TF_IN_AUTOMATION: "true"
+    TF_INPUT: "false"
+    ARM_USE_OIDC: "true"
+    ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+    ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    TF_VAR_notify_mailboxes: ${{ secrets.NOTIFY_MAILBOXES }}
+    TF_VAR_operator_object_id: ${{ vars.OPERATOR_OBJECT_ID }}
+    TF_VAR_notify_subscription_enabled: ${{ inputs.notify && 'true' || 'false' }}
+    RESOURCE_GROUP: rg-triage-azure
+
+jobs:
+    plan:
+        # Dependabot runs get no repo secrets -> OIDC init fails. deploy-code needs no plan.
+        if: github.actor != 'dependabot[bot]' && (github.event_name == 'pull_request' || inputs.action != 'deploy-code')
+        runs-on: ubuntu-24.04
+        timeout-minutes: 20
+        permissions:
+            contents: read
+            id-token: write
+        env:
+            ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_PLAN }}
+        defaults:
+            run:
+                working-directory: infra/envs/azure
+        outputs:
+            changes: ${{ steps.plan.outputs.changes }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - uses: hashicorp/setup-terraform@v4
+              with:
+                  terraform_version: ${{ env.TF_VERSION }}
+                  terraform_wrapper: false
+
+            - name: Install Conftest
+              working-directory: .
+              run: ./scripts/iac.sh install-conftest
+
+            - name: terraform init
+              run: terraform init -backend-config=backend.hcl
+
+            - name: terraform plan
+              id: plan
+              run: |
+                  set +e
+                  terraform plan ${{ inputs.action == 'destroy' && '-destroy' || '' }} \
+                    -lock-timeout=5m -detailed-exitcode -out=tfplan
+                  code=$?
+                  set -e
+                  if [ "$code" -eq 1 ]; then exit 1; fi
+                  echo "changes=$([ "$code" -eq 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+            # The plan that will be applied passes the same policies as the floci-az plan in ci.yml.
+            # Skipped for destroy: nothing remains to check (and the outputs are gone).
+            - name: Policy gate on this exact plan
+              if: inputs.action != 'destroy'
+              run: |
+                  set -o pipefail
+                  terraform show -json tfplan > plan.json
+                  conftest test --no-color --policy ../../policy plan.json | grep -E "^FAIL|tests,"
+                  rm -f plan.json
+
+            - name: Plan summary
+              run: |
+                  {
+                    echo "### terraform plan (${{ inputs.action || 'pull_request' }}, notify=${TF_VAR_notify_subscription_enabled})"
+                    echo '```'
+                    terraform show -no-color tfplan | grep -E '^  # |^Plan:|^No changes' | sed "s/${ARM_SUBSCRIPTION_ID}/***/g"
+                    echo '```'
+                  } >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Encrypt plan
+              if: github.event_name == 'workflow_dispatch' && steps.plan.outputs.changes == 'true'
+              env:
+                  TF_PLAN_KEY: ${{ secrets.TF_PLAN_KEY }}
+              run: openssl enc -aes-256-cbc -pbkdf2 -salt -in tfplan -out tfplan.enc -pass env:TF_PLAN_KEY
+
+            - uses: actions/upload-artifact@v7
+              if: github.event_name == 'workflow_dispatch' && steps.plan.outputs.changes == 'true'
+              with:
+                  name: tfplan
+                  path: infra/envs/azure/tfplan.enc
+                  retention-days: 1
+
+    apply:
+        needs: plan
+        if: github.event_name == 'workflow_dispatch' && needs.plan.outputs.changes == 'true'
+        runs-on: ubuntu-24.04
+        timeout-minutes: 60
+        environment: azure
+        permissions:
+            contents: read
+            id-token: write
+        env:
+            ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_APPLY }}
+        defaults:
+            run:
+                working-directory: infra/envs/azure
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - uses: hashicorp/setup-terraform@v4
+              with:
+                  terraform_version: ${{ env.TF_VERSION }}
+                  terraform_wrapper: false
+
+            - name: terraform init
+              run: terraform init -backend-config=backend.hcl
+
+            - uses: actions/download-artifact@v8
+              with:
+                  name: tfplan
+                  path: infra/envs/azure
+
+            - name: Decrypt plan
+              env:
+                  TF_PLAN_KEY: ${{ secrets.TF_PLAN_KEY }}
+              run: openssl enc -d -aes-256-cbc -pbkdf2 -in tfplan.enc -out tfplan -pass env:TF_PLAN_KEY
+
+            # App Insights creates an action group Terraform doesn't own; the RG delete would refuse it (D22).
+            - name: Remove Azure-generated resources Terraform doesn't own
+              if: inputs.action == 'destroy'
+              working-directory: .
+              run: ./scripts/az-login-oidc.sh && ./scripts/predestroy.sh "$RESOURCE_GROUP"
+
+            - name: terraform apply (${{ inputs.action }})
+              run: terraform apply -lock-timeout=5m tfplan
+
+            - name: Resource group is gone
+              if: inputs.action == 'destroy'
+              working-directory: .
+              run: |
+                  ./scripts/az-login-oidc.sh
+                  test "$(az group exists --name "$RESOURCE_GROUP")" = false && echo "OK   $RESOURCE_GROUP deleted"
+
+    deploy-code:
+        if: github.event_name == 'workflow_dispatch' && inputs.action == 'deploy-code'
+        runs-on: ubuntu-24.04
+        timeout-minutes: 30
+        environment: azure
+        permissions:
+            contents: read
+            id-token: write
+        env:
+            ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID_APPLY }}
+        steps:
+            - uses: actions/checkout@v7
+              with:
+                  persist-credentials: false
+
+            - name: Sign the Azure CLI in with OIDC
+              run: ./scripts/az-login-oidc.sh
+
+            - name: Package src/ and deploy (Flex Consumption, remote build)
+              run: ./scripts/deploy-code.sh "$RESOURCE_GROUP"

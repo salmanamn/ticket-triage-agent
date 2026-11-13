@@ -88,7 +88,50 @@ module "events" {
   tags                          = var.tags
 }
 
+module "openai" {
+  count                      = var.components.openai ? 1 : 0
+  source                     = "../openai"
+  name                       = "oai-${local.suffixed}"
+  resource_group_name        = azurerm_resource_group.this.name
+  location                   = azurerm_resource_group.this.location
+  chat                       = var.chat_deployment
+  embedding                  = var.embedding_deployment
+  diagnostics_enabled        = var.diagnostics_enabled
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+  tags                       = var.tags
+}
+
+module "email" {
+  count                      = var.components.email ? 1 : 0
+  source                     = "../email"
+  name                       = local.suffixed
+  resource_group_name        = azurerm_resource_group.this.name
+  data_location              = var.email_data_location
+  diagnostics_enabled        = var.diagnostics_enabled
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+  tags                       = var.tags
+}
+
 locals {
+  # Model and email settings (D19, D20). Values are endpoints, deployment names and mailbox addresses: no keys.
+  openai_settings = var.components.openai ? {
+    OPENAI_BASE_URL              = module.openai[0].base_url
+    OPENAI_AUTH                  = "entra"
+    CHAT_MODEL                   = module.openai[0].chat_deployment
+    CHAT_REASONING_EFFORT        = var.chat_reasoning_effort
+    TRIAGE_MAX_OUTPUT_TOKENS     = tostring(var.chat_max_output_tokens)
+    EMBEDDING_MODEL              = module.openai[0].embedding_deployment
+    EMBEDDING_REQUEST_DIMENSIONS = "true"
+  } : {}
+
+  email_settings = var.components.email ? {
+    EMAIL_TRANSPORT    = "acs"
+    ACS_ENDPOINT       = module.email[0].endpoint
+    EMAIL_SENDER       = module.email[0].sender_address
+    ESCALATION_MAILBOX = var.notify_mailboxes.escalation
+    REVIEW_MAILBOX     = var.notify_mailboxes.review
+  } : {}
+
   # Endpoints and names only. The Python settings module reads the same names locally (D6).
   app_settings = merge(
     {
@@ -109,7 +152,22 @@ locals {
       EVENTGRID_TOPIC_ENDPOINT = var.components.eventgrid ? module.events[0].topic_endpoint : ""
       EVENT_SOURCE             = "/pearlpay/ticket-triage"
     },
-    var.extra_app_settings, # M8: OPENAI_*, CHAT_MODEL, EMBEDDING_MODEL, email settings
+    local.openai_settings,
+    local.email_settings,
+    var.extra_app_settings,
+  )
+
+  # What the laptop scripts need to reach the deployed stack as the operator (scripts/azure_settings.py).
+  client_settings = merge(
+    {
+      COSMOS_ENDPOINT         = local.app_settings.COSMOS_ENDPOINT
+      COSMOS_DATABASE         = local.app_settings.COSMOS_DATABASE
+      COSMOS_KB_CONTAINER     = local.app_settings.COSMOS_KB_CONTAINER
+      COSMOS_TRIAGE_CONTAINER = local.app_settings.COSMOS_TRIAGE_CONTAINER
+      EMBEDDING_DIMENSIONS    = local.app_settings.EMBEDDING_DIMENSIONS
+      TRIAGE_MAX_ATTEMPTS     = local.app_settings.TRIAGE_MAX_ATTEMPTS
+    },
+    local.openai_settings,
   )
 }
 

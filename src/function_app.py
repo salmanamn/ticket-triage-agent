@@ -9,7 +9,7 @@ from triage.agent import InvalidMessage, Triager, parse_message
 from triage.ai import OpenAIChatModel, OpenAIEmbedder
 from triage.events import EventGridPublisher, EventRelay
 from triage.ingest import handle_submission
-from triage.notify import Mailboxes, Notifier, SmtpMailer
+from triage.notify import AcsMailer, Mailboxes, Mailer, Notifier, SmtpMailer
 from triage.queue import ServiceBusPublisher
 from triage.retrieval import Retriever
 
@@ -29,7 +29,12 @@ def _triager() -> Triager:
     embedder = OpenAIEmbedder()
     return Triager(
         retriever=Retriever(cosmos.kb_container(), embedder),
-        chat=OpenAIChatModel(cfg.chat_model, timeout_s=cfg.timeout_s, max_tokens=cfg.max_output_tokens),
+        chat=OpenAIChatModel(
+            cfg.chat_model,
+            timeout_s=cfg.timeout_s,
+            max_tokens=cfg.max_output_tokens,
+            reasoning_effort=cfg.reasoning_effort,
+        ),
         store=_store(),
         embedding_model=embedder.model,
         kb_k=cfg.kb_k,
@@ -42,12 +47,19 @@ def _relay() -> EventRelay:
     return EventRelay(_store(), EventGridPublisher(), settings.events().source)
 
 
+def _mailer(cfg: settings.NotifySettings) -> Mailer:
+    """Mailpit (SMTP) locally, ACS Email with the app's managed identity on Azure (D20)."""
+    if cfg.transport == "acs":
+        return AcsMailer.from_endpoint(cfg.acs_endpoint)
+    return SmtpMailer(cfg.smtp_host, cfg.smtp_port, cfg.smtp_starttls)
+
+
 @lru_cache(maxsize=1)
 def _notifier() -> Notifier:
     cfg = settings.notify()
     return Notifier(
         _store(),
-        SmtpMailer(cfg.smtp_host, cfg.smtp_port, cfg.smtp_starttls),
+        _mailer(cfg),
         Mailboxes(sender=cfg.sender, escalation=cfg.escalation_mailbox, review=cfg.review_mailbox),
     )
 
