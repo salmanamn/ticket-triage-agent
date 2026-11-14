@@ -13,4 +13,4 @@ sttriageazureu9k7q    other            AcquireBlobLease  3       3
 sttriageazureu9k7q    other            ReleaseBlobLease  4       4
 sttriageazureu9k7q    other            RenewBlobLease    56      56
 sttriageazureu9k7q    other            SetBlobMetadata   3       3
-inbox 2026-11-14T16:30Z: [HIGH] M9-E02-2 -> escalation mailbox; nothing for M9-E02-1 (dead-lettered)
+inbox 2026-11-14T16:30Z: no email sent. M9-E02-1 dead-lettered (notify broken on purpose). M9-E02-2 triaged low with 0 sources (KB not seeded this session, runbook gap); notify ran and chose route none.
