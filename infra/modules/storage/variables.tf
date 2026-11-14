@@ -16,6 +16,11 @@ variable "location" {
   type = string
 }
 
+variable "containers" {
+  description = "Private blob containers to create in the account"
+  type        = set(string)
+}
+
 variable "diagnostics_enabled" {
   type = bool
 }

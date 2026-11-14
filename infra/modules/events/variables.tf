@@ -33,14 +33,11 @@ variable "notify_webhook_url" {
 }
 
 variable "deadletter_storage_account_id" {
-  type = string
+  description = "Storage account that holds nothing but dead-letters: the topic identity gets its blob role on the whole account (D24, D25)"
+  type        = string
 }
 
 variable "deadletter_container_name" {
-  type = string
-}
-
-variable "deadletter_container_id" {
   type = string
 }
 

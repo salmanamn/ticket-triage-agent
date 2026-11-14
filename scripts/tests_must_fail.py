@@ -166,6 +166,13 @@ MUTATIONS = [
         "tests/unit/test_infra_contract.py",
     ),
     Mutation(
+        "terraform-deadletter-on-host",
+        "infra/modules/stack/main.tf",
+        "deadletter_storage_account_id = module.deadletter[0].account_id",
+        "deadletter_storage_account_id = module.storage.account_id",
+        "tests/unit/test_infra_contract.py",
+    ),
+    Mutation(
         "terraform-vector-index-drift",
         "infra/modules/cosmos/knowledge-container.json",
         '"vectorIndexes": [{ "path": "/embedding", "type": "diskANN" }]',

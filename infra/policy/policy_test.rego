@@ -75,6 +75,8 @@ good_resources := [
 	diag("module.email"),
 	rc("module.stack", "azurerm_role_assignment", "operator_openai", {"role_definition_id": role("5e0bd9bd-7b93-4f28-af87-19fc36ad61bd"), "principal_type": "User"}),
 	rc("module.oai", "azurerm_cognitive_deployment", "chat", {"sku": [{"name": "GlobalStandard", "capacity": 50}]}),
+	rc("module.st", "azurerm_storage_container", "this[\"app-package\"]", {"name": "app-package"}),
+	rc("module.dl", "azurerm_storage_container", "this[\"eventgrid-deadletter\"]", {"name": "eventgrid-deadletter"}),
 ]
 
 plan_of(resources, settings) := {
@@ -174,6 +176,7 @@ test_connection_string_setting_fails if {
 test_key_named_setting_fails if {
 	count(deny) == 1 with input as plan_of(good_resources, ["OPENAI_API_KEY"])
 }
+
 test_openai_keys_fail if {
 	count(deny) == 1 with input as patched(16, "local_auth_enabled", true)
 }
@@ -203,4 +206,21 @@ test_operator_with_data_owner_role_fails if {
 
 test_provisioned_deployment_fails if {
 	count(deny) == 1 with input as patched(21, "sku", [{"name": "GlobalProvisionedManaged", "capacity": 15}])
+}
+
+test_deadletter_container_sharing_an_account_fails if {
+	extra := array.concat(good_resources, [rc("module.dl", "azurerm_storage_container", "this[\"app-package\"]", {"name": "app-package"})])
+	count(deny) == 1 with input as plan_of(extra, good.output_changes.summary.after.app_setting_names)
+}
+
+test_deadletter_container_in_host_storage_fails if {
+	moved := array.concat(
+		[r | some i, r in good_resources; i != 23],
+		[rc("module.st", "azurerm_storage_container", "this[\"eventgrid-deadletter\"]", {"name": "eventgrid-deadletter"})],
+	)
+	count(deny) == 1 with input as plan_of(moved, good.output_changes.summary.after.app_setting_names)
+}
+
+test_deadletter_to_another_container_fails if {
+	count(deny) == 1 with input as patched(8, "storage_blob_dead_letter_destination", [{"storage_blob_container_name": "app-package"}])
 }

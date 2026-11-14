@@ -14,6 +14,8 @@ from triage.cosmos import kb_policies
 ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE = ROOT / "infra" / "modules" / "cosmos" / "knowledge-container.json"
 STACK_VARIABLES = ROOT / "infra" / "modules" / "stack" / "variables.tf"
+STACK_MAIN = ROOT / "infra" / "modules" / "stack" / "main.tf"
+EVENTS_MAIN = ROOT / "infra" / "modules" / "events" / "main.tf"
 
 
 def knowledge_resource() -> dict:
@@ -31,6 +33,15 @@ def tf_default(variable: str) -> str:
     default = re.search(r"^\s*default\s*=\s*(\S+)", block.group(1), re.MULTILINE)
     assert default, f"variable {variable} has no default"
     return default.group(1)
+
+
+def stack_module_arg(module: str, argument: str) -> str:
+    """Right-hand side of one argument of a `module` block in infra/modules/stack/main.tf."""
+    block = re.search(rf'^module "{module}" \{{\n(.*?)^\}}', STACK_MAIN.read_text(), re.DOTALL | re.MULTILINE)
+    assert block, f"module {module} not found in the stack"
+    value = re.search(rf"^\s*{argument}\s*=\s*(.+)$", block.group(1), re.MULTILINE)
+    assert value, f"module {module} has no argument {argument}"
+    return value.group(1).strip()
 
 
 def test_knowledge_container_matches_code_policies():
@@ -68,3 +79,18 @@ def test_every_required_setting_is_an_azure_app_setting():
     set_by_stack = set(re.findall(r"^\s*(\w+)\s+=", stack, re.MULTILINE))
     assert {"OPENAI_BASE_URL", "ACS_ENDPOINT", "REVIEW_MAILBOX"} <= required  # the regex still finds them
     assert required - set_by_stack == set()
+
+
+def test_event_grid_dead_letters_have_their_own_storage_account():
+    """D25: Event Grid only accepts an account-scoped blob role for the topic identity (D24), so the account it
+    gets must hold the dead-letter container and nothing else, never the Function App's host storage."""
+    assert stack_module_arg("events", "deadletter_storage_account_id") == "module.deadletter[0].account_id"
+    assert stack_module_arg("deadletter", "source") == stack_module_arg("storage", "source") == '"../storage"'
+    assert stack_module_arg("deadletter", "containers") == "[local.deadletter_container]"
+    assert stack_module_arg("storage", "containers") == "[local.deployment_container]"
+
+    events = EVENTS_MAIN.read_text()
+    role = re.search(r'resource "azurerm_role_assignment" "topic_deadletter" \{(.*?)\n\}', events, re.DOTALL)
+    assert role, "topic_deadletter role assignment not found"
+    assert re.search(r"^\s*scope\s*=\s*var\.deadletter_storage_account_id$", role.group(1), re.MULTILINE)
+    assert re.search(r"^\s*storage_account_id\s*=\s*var\.deadletter_storage_account_id$", events, re.MULTILINE)

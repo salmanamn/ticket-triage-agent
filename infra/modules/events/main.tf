@@ -1,6 +1,7 @@
 # Event Grid custom topic for Ticket.Triaged (CloudEvents 1.0, D13) and the `notify` subscription.
 # Publishers authenticate with Entra ID only (EventGrid Data Sender, local auth disabled).
-# Undeliverable events go to a blob container, written with the topic's own managed identity (D16).
+# Undeliverable events go to a blob container in a storage account of their own, written with the topic's
+# managed identity (D16, D25).
 terraform {
   required_providers {
     azurerm = { source = "hashicorp/azurerm" }
@@ -24,9 +25,11 @@ resource "azurerm_eventgrid_topic" "this" {
   tags = var.tags
 }
 
+# Event Grid validates this role on the storage account, not on the container (D24). The account it gets
+# holds only the dead-letter container (D25), so account scope is the narrowest scope that works.
 resource "azurerm_role_assignment" "topic_deadletter" {
   count              = var.role_assignments_enabled ? 1 : 0
-  scope              = var.deadletter_storage_account_id                                                                                              # Event Grid validates the role at account scope (D24)
+  scope              = var.deadletter_storage_account_id
   role_definition_id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe" # Storage Blob Data Contributor
   principal_id       = azurerm_eventgrid_topic.this.identity[0].principal_id
   principal_type     = "ServicePrincipal"

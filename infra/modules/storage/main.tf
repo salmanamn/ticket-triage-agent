@@ -1,5 +1,6 @@
-# Storage for the Function App (AzureWebJobsStorage + Flex deployment package) and the Event Grid
-# dead-letter container. Entra ID only: no account keys, no SAS, no anonymous blobs.
+# One hardened storage account with its private containers. Entra ID only: no account keys, no SAS,
+# no anonymous blobs. The stack creates two: the Function App's host storage (AzureWebJobsStorage +
+# Flex deployment package) and a separate account for Event Grid dead-letters (D25).
 terraform {
   required_providers {
     azurerm = { source = "hashicorp/azurerm" }
@@ -8,8 +9,8 @@ terraform {
 
 resource "azurerm_storage_account" "this" {
   #checkov:skip=CKV_AZURE_206:LRS is intentional for a disposable lab stack (destroyed every session)
-  #checkov:skip=CKV_AZURE_59:Flex Consumption without VNet integration reaches its storage over the public endpoint; access is Entra-only (D15)
-  #checkov:skip=CKV_AZURE_35:Same as CKV_AZURE_59: default action Deny would lock out the Function host (no VNet in the lab, D15)
+  #checkov:skip=CKV_AZURE_59:The Flex app (no VNet integration) and Event Grid reach it over the public endpoint; access is Entra-only (D15)
+  #checkov:skip=CKV_AZURE_35:Same as CKV_AZURE_59: default action Deny needs VNet integration or a trusted-service exception (not in the lab, D15)
   #checkov:skip=CKV2_AZURE_33:Private endpoints need VNet integration of the Flex app; deferred (D15)
   #checkov:skip=CKV2_AZURE_1:CMK not used for a disposable lab account; Microsoft-managed keys + infrastructure encryption
   #checkov:skip=CKV_AZURE_33:Classic queue logging is legacy; blob resource logs go to log-slz-platform via diagnostic settings
@@ -25,7 +26,7 @@ resource "azurerm_storage_account" "this" {
   min_tls_version            = "TLS1_2"
 
   allow_nested_items_to_be_public = false
-  public_network_access_enabled   = true # Flex app without VNet integration (D15)
+  public_network_access_enabled   = true # no VNet in the lab (D15)
 
   shared_access_key_enabled        = false
   default_to_oauth_authentication  = true
@@ -56,18 +57,12 @@ resource "azurerm_storage_account" "this" {
   }
 }
 
-# Flex Consumption reads the deployment package from here (one container per app).
-resource "azurerm_storage_container" "deployments" {
+# Private containers. The names are fixed by the stack: app-package (Flex deployment package) in the
+# host account, eventgrid-deadletter (undeliverable Ticket.Triaged events) in the dead-letter account.
+resource "azurerm_storage_container" "this" {
   #checkov:skip=CKV2_AZURE_21:Blob read logging is enabled on the blob service via the diagnostic setting below
-  name                  = "app-package"
-  storage_account_id    = azurerm_storage_account.this.id
-  container_access_type = "private"
-}
-
-# Event Grid writes undeliverable Ticket.Triaged events here (managed identity, D16).
-resource "azurerm_storage_container" "deadletter" {
-  #checkov:skip=CKV2_AZURE_21:Blob read logging is enabled on the blob service via the diagnostic setting below
-  name                  = "eventgrid-deadletter"
+  for_each              = var.containers
+  name                  = each.value
   storage_account_id    = azurerm_storage_account.this.id
   container_access_type = "private"
 }

@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKSPACE_OTHER = "/subscriptions/x/resourceGroups/rg-x/providers/Microsoft.OperationalInsights/workspaces/law-x"
 OWNER = "8e3af657-a8ff-443c-a75c-2fe8c4bcb635"
+DEADLETTER_CONTAINER = "eventgrid-deadletter"
 
 
 @dataclass(frozen=True)
@@ -87,6 +88,25 @@ def openai_subdomain_removed(plan: dict) -> None:
     raise LookupError("azurerm_cognitive_account")
 
 
+def deadletter_into_host_storage(plan: dict) -> None:
+    """As if the dead-letter container were created in the Function App's host storage account again (D24 -> D25)."""
+    containers = [
+        rc for rc in plan["resource_changes"] if rc["type"] == "azurerm_storage_container" and rc["change"]["after"]
+    ]
+    dead = [rc for rc in containers if rc["change"]["after"]["name"] == DEADLETTER_CONTAINER]
+    host = [rc for rc in containers if rc["change"]["after"]["name"] != DEADLETTER_CONTAINER]
+    if not dead or not host:
+        raise LookupError("dead-letter container and host container")
+    dead[0]["module_address"] = host[0]["module_address"]
+
+
+def deadletter_to_host_container(after: dict) -> None:
+    destinations = after.get("storage_blob_dead_letter_destination") or []
+    if not destinations:
+        raise LookupError("storage_blob_dead_letter_destination")
+    destinations[0]["storage_blob_container_name"] = "app-package"
+
+
 def provisioned_sku(after: dict) -> None:
     after["sku"][0]["name"] = "GlobalProvisionedManaged"
 
@@ -121,6 +141,10 @@ MUTATIONS = [
         "azurerm_eventgrid_event_subscription",
         setter("storage_blob_dead_letter_destination", []),
     ),
+    Mutation(
+        "notify-deadletter-to-host-container", "azurerm_eventgrid_event_subscription", deadletter_to_host_container
+    ),
+    Mutation("deadletter-shares-host-storage", "<plan>", deadletter_into_host_storage),
     Mutation("storage-shared-key", "azurerm_storage_account", setter("shared_access_key_enabled", True)),
     Mutation("storage-public-blobs", "azurerm_storage_account", setter("allow_nested_items_to_be_public", True)),
     Mutation(

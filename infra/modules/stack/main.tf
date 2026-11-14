@@ -18,6 +18,9 @@ resource "random_string" "suffix" {
 
 locals {
   suffixed = "${var.name}-${random_string.suffix.result}"
+
+  deployment_container = "app-package"          # Flex Consumption deployment package
+  deadletter_container = "eventgrid-deadletter" # undeliverable Ticket.Triaged events
 }
 
 resource "azurerm_resource_group" "this" {
@@ -34,11 +37,28 @@ resource "azurerm_user_assigned_identity" "app" {
   tags                = var.tags
 }
 
+# Host storage of the Function App: AzureWebJobsStorage and the Flex deployment package. Only the app identity
+# has a data role here (Storage Blob Data Owner, rbac.tf).
 module "storage" {
   source                     = "../storage"
   name                       = "st${replace(var.name, "-", "")}${random_string.suffix.result}"
   resource_group_name        = azurerm_resource_group.this.name
   location                   = azurerm_resource_group.this.location
+  containers                 = [local.deployment_container]
+  diagnostics_enabled        = var.diagnostics_enabled
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+  tags                       = var.tags
+}
+
+# Event Grid dead-letters get a storage account of their own (D25). Event Grid insists on an account-scoped
+# role for the topic identity (D24); on this account that role reaches nothing but dead-letters.
+module "deadletter" {
+  count                      = var.components.eventgrid ? 1 : 0
+  source                     = "../storage"
+  name                       = "stdl${replace(var.name, "-", "")}${random_string.suffix.result}"
+  resource_group_name        = azurerm_resource_group.this.name
+  location                   = azurerm_resource_group.this.location
+  containers                 = [local.deadletter_container]
   diagnostics_enabled        = var.diagnostics_enabled
   log_analytics_workspace_id = var.log_analytics_workspace_id
   tags                       = var.tags
@@ -79,9 +99,8 @@ module "events" {
   subscription_enabled          = var.notify_subscription_enabled && (var.notify_webhook_url != null || var.components.function_app)
   notify_function_id            = var.components.function_app ? "${module.functionapp[0].id}/functions/notify_ticket" : null
   notify_webhook_url            = var.notify_webhook_url
-  deadletter_storage_account_id = module.storage.account_id
-  deadletter_container_name     = module.storage.deadletter_container_name
-  deadletter_container_id       = module.storage.deadletter_container_id
+  deadletter_storage_account_id = module.deadletter[0].account_id
+  deadletter_container_name     = module.deadletter[0].container_names[local.deadletter_container]
   role_assignments_enabled      = var.components.rbac
   diagnostics_enabled           = var.diagnostics_enabled
   log_analytics_workspace_id    = var.log_analytics_workspace_id
@@ -193,7 +212,7 @@ module "functionapp" {
   identity_client_id                     = azurerm_user_assigned_identity.app.client_id
   storage_account_name                   = module.storage.account_name
   storage_primary_blob_endpoint          = module.storage.primary_blob_endpoint
-  deployment_container_name              = module.storage.deployments_container_name
+  deployment_container_name              = module.storage.container_names[local.deployment_container]
   maximum_instance_count                 = var.function_maximum_instance_count
   application_insights_connection_string = azurerm_application_insights.this[0].connection_string
   app_settings                           = local.app_settings
