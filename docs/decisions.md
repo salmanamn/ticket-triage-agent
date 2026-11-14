@@ -142,3 +142,11 @@
 - `envs/azure` keeps `prevent_deletion_if_contains_resources = true`, so anything left in `rg-triage-azure` that Terraform doesn't own fails the destroy loudly. Known Azure-generated resources are handled explicitly: `application_insights.disable_generated_rule = true` (the "Failure Anomalies" rule is disabled on create and deleted with the component) and `scripts/predestroy.sh` deletes the "Application Insights Smart Detection" action group before the destroy apply.
 - `cognitive_account.purge_soft_delete_on_destroy = true`: a soft-deleted account would hold its name and quota for 48 h.
 - The destroy job ends with `az group exists` = false. The Event Grid dead-letter container and every log are gone with the stack; the telemetry stays in `log-slz-platform` (90 days).
+
+## D23 — Workaround: azurerm 4.81 writes a key-based AzureWebJobsStorage on Flex apps
+- `azurerm_function_app_flex_consumption` (4.81) always sets `AzureWebJobsStorage = DefaultEndpointsProtocol=https;AccountName=<st>;AccountKey=<storage_access_key>;…` on create and update, even with `storage_authentication_type = UserAssignedIdentity`; the key is then empty. The host prefers it over `AzureWebJobsStorage__*`, signs with the empty key and fails to start (403 AuthenticationFailed on `azure-webjobs-secrets`, seen in M8).
+- `scripts/fix-host-storage.sh` deletes the setting and restarts the app; `deploy.yml` runs it after every apply and before every code deploy. azurerm's refresh ignores its absence (no drift). Remove the workaround when the provider stops writing it.
+
+## D24 — Event Grid dead-letter role at storage-account scope
+- Event Grid validates, when it creates a subscription, that the topic's managed identity may write dead-letters, and checks it on the storage account: a role scoped to the `eventgrid-deadletter` container fails with "Managed Identity Authorization Error … not authorized to deliver to the deadletter endpoint" (seen in M8).
+- The topic identity therefore gets Storage Blob Data Contributor on the stack's storage account, which also covers the app's host and deployment containers. Accepted for the lab; the least-privilege alternative is a separate dead-letter storage account (later).
