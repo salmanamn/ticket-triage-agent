@@ -103,6 +103,30 @@ deny contains msg if {
 	msg := sprintf("%s: subscription filters on Ticket.Triaged only; routing is in code (D13)", [rc.address])
 }
 
+# The dead-letter container has a storage account of its own (D25). Event Grid only accepts an account-scoped
+# blob role for the topic identity (D24), so that account must hold nothing else. Container names are known at
+# plan time and account ids are not, so the rules work on modules: one storage module instance is one account.
+deadletter_container := "eventgrid-deadletter"
+
+deadletter_modules := {object.get(rc, "module_address", "") |
+	some rc in resources("azurerm_storage_container")
+	rc.change.after.name == deadletter_container
+}
+
+deny contains msg if {
+	some rc in resources("azurerm_storage_container")
+	object.get(rc, "module_address", "") in deadletter_modules
+	rc.change.after.name != deadletter_container
+	msg := sprintf("%s: shares a storage account with the Event Grid dead-letter container; dead-letters get an account of their own (D25)", [rc.address])
+}
+
+deny contains msg if {
+	some rc in resources("azurerm_eventgrid_event_subscription")
+	some dest in object.get(rc.change.after, "storage_blob_dead_letter_destination", [])
+	dest.storage_blob_container_name != deadletter_container
+	msg := sprintf("%s: dead-letters go to the %s container, which has its own storage account (D25)", [rc.address, deadletter_container])
+}
+
 # --- Function App: Flex Consumption ---------------------------------------------------------
 
 deny contains msg if {
@@ -139,6 +163,7 @@ deny contains msg if {
 	not rc.change.after.site_config[0].minimum_tls_version == "1.2"
 	msg := sprintf("%s: minimum TLS must be 1.2", [rc.address])
 }
+
 # --- Azure OpenAI: pay-per-token only ---------------------------------------------------------
 
 deny contains msg if {

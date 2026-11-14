@@ -14,6 +14,10 @@ output "storage_account_name" {
   value = module.storage.account_name
 }
 
+output "deadletter_storage_account_name" {
+  value = try(module.deadletter[0].account_name, null)
+}
+
 output "eventgrid_topic_endpoint" {
   value = try(module.events[0].topic_endpoint, null)
 }
