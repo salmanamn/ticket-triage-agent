@@ -1,0 +1,16 @@
+== Role assignments of the topic identity
+Storage Blob Data Contributor	Microsoft.Storage/storageAccounts/stdltriageazureu9k7q
+OK   one role, on the dead-letter storage account
+
+== Event Grid topic metrics since 2026-11-14T15:57:14Z
+DeliveryAttemptFailCount  5
+DeadLetteredCount         1
+
+== Blob writes per storage account and caller (StorageBlobLogs)
+AccountName           Caller           OperationName     Writes  Succeeded
+stdltriageazureu9k7q  eventgrid-topic  PutBlob           1       1
+sttriageazureu9k7q    other            AcquireBlobLease  3       3
+sttriageazureu9k7q    other            ReleaseBlobLease  4       4
+sttriageazureu9k7q    other            RenewBlobLease    56      56
+sttriageazureu9k7q    other            SetBlobMetadata   3       3
+inbox 2026-11-14T16:30Z: [HIGH] M9-E02-2 -> escalation mailbox; nothing for M9-E02-1 (dead-lettered)
