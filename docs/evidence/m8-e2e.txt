@@ -1,0 +1,10 @@
+202 {"ticket_id": "M8-E02-1", "status": "queued"}
+expected: cards / high
+202 {"ticket_id": "M8-E14-1", "status": "queued"}
+expected: cards / low
+202 {"ticket_id": "M8-E03-1", "status": "queued"}
+expected: cards / low
+{"id":"M8-E02-1","status":"triaged","category":"cards","priority":"high","injection_suspected":false,"model":"gpt-5.4-mini","published":true,"notified":"escalation"}
+{"id":"M8-E14-1","status":"triaged","category":"cards","priority":"low","injection_suspected":true,"model":"gpt-5.4-mini","published":true,"notified":"human_review"}
+{"id":"M8-E03-1","status":"triaged","category":"cards","priority":"low","injection_suspected":false,"model":"gpt-5.4-mini","published":true,"notified":"none"}
+inbox 2026-11-14T00:46Z: [HIGH] M8-E02-1 -> escalation mailbox; [REVIEW] M8-E14-1 -> review mailbox; nothing for M8-E03-1
