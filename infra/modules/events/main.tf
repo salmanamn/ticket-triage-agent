@@ -26,7 +26,7 @@ resource "azurerm_eventgrid_topic" "this" {
 
 resource "azurerm_role_assignment" "topic_deadletter" {
   count              = var.role_assignments_enabled ? 1 : 0
-  scope              = var.deadletter_container_id
+  scope              = var.deadletter_storage_account_id                                                                                              # Event Grid validates the role at account scope (D24)
   role_definition_id = "/subscriptions/${var.subscription_id}/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe" # Storage Blob Data Contributor
   principal_id       = azurerm_eventgrid_topic.this.identity[0].principal_id
   principal_type     = "ServicePrincipal"

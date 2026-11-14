@@ -14,6 +14,7 @@ on:
             - ".github/workflows/deploy.yml"
             - "scripts/deploy-code.sh"
             - "scripts/az-login-oidc.sh"
+            - "scripts/fix-host-storage.sh"
     workflow_dispatch:
         inputs:
             action:
@@ -168,6 +169,13 @@ jobs:
             - name: terraform apply (${{ inputs.action }})
               run: terraform apply -lock-timeout=5m tfplan
 
+            # azurerm 4.81 writes AzureWebJobsStorage with an empty account key on every create/update of the Flex
+            # app; the host would sign with it and never start (D23).
+            - name: Remove azurerm's key-based AzureWebJobsStorage
+              if: inputs.action == 'apply'
+              working-directory: .
+              run: ./scripts/az-login-oidc.sh && ./scripts/fix-host-storage.sh "$RESOURCE_GROUP"
+
             - name: Resource group is gone
               if: inputs.action == 'destroy'
               working-directory: .
@@ -192,6 +200,9 @@ jobs:
 
             - name: Sign the Azure CLI in with OIDC
               run: ./scripts/az-login-oidc.sh
+
+            - name: Remove azurerm's key-based AzureWebJobsStorage (D23)
+              run: ./scripts/fix-host-storage.sh "$RESOURCE_GROUP"
 
             - name: Package src/ and deploy (Flex Consumption, remote build)
               run: ./scripts/deploy-code.sh "$RESOURCE_GROUP"
