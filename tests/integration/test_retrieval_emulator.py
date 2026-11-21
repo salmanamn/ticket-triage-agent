@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from cosmos_cleanup import drop_database
 
 from triage.retrieval import Document, Retriever
 
@@ -45,7 +46,7 @@ def container(monkeypatch, hash_embedder):
 
     cosmos.client.cache_clear()
     yield cosmos.ensure_kb_container(hash_embedder.dimensions)
-    cosmos.client().delete_database(database)
+    drop_database(cosmos.client(), database)
     cosmos.client.cache_clear()
 
 

@@ -20,6 +20,7 @@ from typing import Any
 import openai
 import pytest
 from azure.servicebus import ServiceBusClient
+from cosmos_cleanup import drop_database
 
 pytestmark = pytest.mark.integration
 
@@ -179,7 +180,7 @@ def lab(tmp_path_factory):
 
     for server in (fake_llm, stub, webhook.server):
         server.shutdown()
-    cosmos.client().delete_database(database)
+    drop_database(cosmos.client(), database)
     clear_caches()
     mp.undo()
 
