@@ -163,3 +163,8 @@
 - Open workaround: D23 (azurerm writes a key-based `AzureWebJobsStorage`).
 - Detections for this stack live in `kql-threat-detection-lab`: SLZ-009 (data-service or Function keys listed outside CI) and SLZ-010 (federated credential changed on a managed identity); role assignments were already covered by SLZ-001.
 - Dates to re-check before another Azure session: gpt-5.4-mini retires 2027-09-21, text-embedding-3-small 2028-02-09.
+
+## D27 — Emulator databases that won't drop are a warning, not a failure (updates D14)
+- On 2026-11-21 CI's `integration` job failed twice on a PR that only added `LICENSE`, with the emulator digest unchanged since M5: every test passed, but 3 of 8 Cosmos teardowns (and, in the first run, the smoke script's cleanup) got HTTP 500 `Database query failed: PostgresError(SqlState(E58P01))` on `delete_database`. E58P01 is Postgres's "undefined file": the emulator's own storage, not this code. Probably a runner-image change; not reproduced locally.
+- `tests/integration/cosmos_cleanup.py::drop_database` retries a 500 twice (2 s apart), then warns and moves on; a 404 counts as dropped; any other status still fails. `scripts/smoke_emulators.py` prints `WARN cosmos cleanup …` instead of failing. No test assertion changes: only the cleanup of a database in an emulator that lives as long as the job is tolerated.
+- Re-check when the emulator digest is next bumped: if the 500s are gone, keep the helper and say so here.
