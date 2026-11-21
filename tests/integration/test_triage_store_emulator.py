@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from cosmos_cleanup import drop_database
 
 pytestmark = pytest.mark.integration
 
@@ -18,7 +19,7 @@ def store(monkeypatch):
 
     cosmos.client.cache_clear()
     yield cosmos.CosmosTriageStore(cosmos.ensure_triage_container())
-    cosmos.client().delete_database(database)
+    drop_database(cosmos.client(), database)
     cosmos.client.cache_clear()
 
 

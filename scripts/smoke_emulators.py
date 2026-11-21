@@ -12,7 +12,7 @@ import os
 import sys
 import uuid
 
-from azure.cosmos import CosmosClient, PartitionKey
+from azure.cosmos import CosmosClient, PartitionKey, exceptions
 from azure.servicebus import ServiceBusClient, ServiceBusMessage
 
 SB_CONN = os.getenv(
@@ -54,7 +54,12 @@ def cosmos() -> None:
             raise RuntimeError(f"unexpected item: {got}")
         print("OK   cosmos create/upsert/read")
     finally:
-        client.delete_database("smoke")
+        try:
+            client.delete_database("smoke")
+        except exceptions.CosmosHttpResponseError as exc:  # emulator 500 on DROP since 2026-11-21 (D27)
+            if exc.status_code != 500:
+                raise
+            print(f"WARN cosmos cleanup: the emulator did not drop the smoke database (HTTP {exc.status_code})")
 
 
 def main() -> int:
