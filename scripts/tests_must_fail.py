@@ -18,7 +18,19 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-COPY = ("src", "tests", "scripts", "kb", "eval", "emulators", "infra", "pyproject.toml")
+COPY = (
+    "src",
+    "tests",
+    "scripts",
+    "kb",
+    "eval",
+    "emulators",
+    "infra",
+    "deploy",
+    "pyproject.toml",
+    "Dockerfile",
+    ".dockerignore",
+)
 SUMMARY = re.compile(r"(\d+) failed")
 
 
@@ -32,6 +44,70 @@ class Mutation:
 
 
 MUTATIONS = [
+    # Project 7 (D28-D30): the container, the laptop-only queue depth, the lab stub's webhook key
+    Mutation(
+        "image-runs-as-root",
+        "Dockerfile",
+        "USER 10001:10001",
+        "USER root",
+        "tests/unit/test_container.py",
+    ),
+    Mutation(
+        "packages-outside-python-packages",
+        "Dockerfile",
+        "--target /home/site/wwwroot/.python_packages/lib/site-packages",
+        "--target /usr/local/lib/python3.13/site-packages",
+        "tests/unit/test_container.py",
+    ),
+    Mutation(
+        "cosmos-discovery-ignored",
+        "src/triage/cosmos.py",
+        "return CosmosClient(cfg.endpoint, credential=cfg.key, enable_endpoint_discovery=cfg.endpoint_discovery)",
+        "return CosmosClient(cfg.endpoint, credential=cfg.key)",
+        "tests/unit/test_queue_depth.py",
+    ),
+    Mutation(
+        "queue-depth-always-on",
+        "src/function_app.py",
+        "if settings.queue_depth_endpoint():",
+        "if True:",
+        "tests/unit/test_queue_depth.py",
+    ),
+    Mutation(
+        "queue-depth-anonymous",
+        "src/function_app.py",
+        '@app.route(route="queue-depth", methods=["GET"])',
+        '@app.route(route="queue-depth", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)',
+        "tests/unit/test_queue_depth.py",
+    ),
+    Mutation(
+        "queue-depth-receives",
+        "src/triage/queue.py",
+        "return len(receiver.peek_messages(max_message_count=limit, timeout=QUEUE_DEPTH_TIMEOUT_S))",
+        "return len(receiver.receive_messages(max_message_count=limit, max_wait_time=QUEUE_DEPTH_TIMEOUT_S))",
+        "tests/unit/test_queue_depth.py",
+    ),
+    Mutation(
+        "stub-logs-webhook-key",
+        "scripts/eventgrid_stub.py",
+        "-> {sub['endpoint']}{keyed}",
+        "-> {webhook_url(sub)}",
+        "tests/unit/test_lab_tools.py",
+    ),
+    Mutation(
+        "queue-depth-retries",
+        "src/triage/queue.py",
+        "return _new_client(retry_total=0)",
+        "return _new_client()",
+        "tests/unit/test_queue_depth.py",
+    ),
+    Mutation(
+        "chart-worker-replicas",
+        "deploy/chart/ticket-triage/templates/deployment-worker.yaml",
+        "spec:\n  selector:\n    matchLabels:",
+        "spec:\n  replicas: 1\n  selector:\n    matchLabels:",
+        "tests/unit/test_chart.py",
+    ),
     Mutation(
         "fraud-floor-removed",
         "src/triage/agent.py",

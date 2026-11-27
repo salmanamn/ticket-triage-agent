@@ -1,0 +1,10 @@
+# The image gets the app (src/) and the two lab tools, nothing else (D28). Local settings never go in.
+*
+!src/
+!scripts/fake_llm.py
+!scripts/eventgrid_stub.py
+src/local.settings.json
+src/local.settings.json.example
+src/azure.settings.json
+**/__pycache__
+**/*.pyc

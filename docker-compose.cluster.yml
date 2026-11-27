@@ -1,0 +1,33 @@
+# Project 7 (secure-ai-platform, its M3; here D30): the emulators the laptop cluster's triage tenant uses, attached
+# to minikube's docker network ("aiplat") with fixed addresses, so the pods reach them directly. Their ports stay
+# published on 127.0.0.1 for the laptop's own scripts; nothing new is published.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cluster.yml --profile notify up -d
+#
+# The network belongs to minikube: start the cluster first (secure-ai-platform: ./scripts/cluster.sh up).
+# 192.168.49.96/28 is the platform's range for this tenant (its egressCIDRs); the four addresses are inside it.
+services:
+  servicebus:
+    networks:
+      default: {}
+      aiplat:
+        ipv4_address: 192.168.49.101
+  cosmos:
+    networks:
+      default: {}
+      aiplat:
+        ipv4_address: 192.168.49.102
+  azurite:
+    networks:
+      default: {}
+      aiplat:
+        ipv4_address: 192.168.49.103
+  mailpit:
+    networks:
+      default: {}
+      aiplat:
+        ipv4_address: 192.168.49.104
+
+networks:
+  aiplat:
+    external: true

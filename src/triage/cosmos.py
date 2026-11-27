@@ -13,10 +13,12 @@ from . import settings
 def client() -> CosmosClient:
     cfg = settings.cosmos()
     if cfg.key:
-        return CosmosClient(cfg.endpoint, credential=cfg.key)
+        return CosmosClient(cfg.endpoint, credential=cfg.key, enable_endpoint_discovery=cfg.endpoint_discovery)
     from azure.identity import DefaultAzureCredential
 
-    return CosmosClient(cfg.endpoint, credential=DefaultAzureCredential())
+    return CosmosClient(
+        cfg.endpoint, credential=DefaultAzureCredential(), enable_endpoint_discovery=cfg.endpoint_discovery
+    )
 
 
 def kb_policies(dimensions: int) -> tuple[dict[str, Any], dict[str, Any]]:

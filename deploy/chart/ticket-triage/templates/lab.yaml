@@ -1,0 +1,130 @@
+{{- if .Values.lab.enabled }}
+{{- /*
+Laptop only (D30): the fake LLM and the Event Grid stub, the two stdlib tools Project 3 runs on the host, here as
+pods from the same image (/opt/triage-lab). The stub calls the notify webhook with the host's eventgrid_extension
+system key, read from the function keys Secret, and never logs it.
+*/ -}}
+{{- $root := . }}
+{{- range $tool := list "llm" "eventgrid" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $root.Release.Name }}-lab-{{ $tool }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" $root | nindent 4 }}
+    app.kubernetes.io/component: lab-{{ $tool }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "ticket-triage.selector" (dict "root" $root "component" (printf "lab-%s" $tool)) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ticket-triage.labels" $root | nindent 8 }}
+        app.kubernetes.io/component: lab-{{ $tool }}
+    spec:
+      {{- include "ticket-triage.podSecurity" $root | nindent 6 }}
+      containers:
+        - name: {{ $tool }}
+          image: {{ include "ticket-triage.image" $root }}
+          imagePullPolicy: IfNotPresent
+          {{- if eq $tool "llm" }}
+          command: ["python3", "/opt/triage-lab/fake_llm.py", "--host", "0.0.0.0", "--port", "11434"]
+          ports:
+            - name: http
+              containerPort: 11434
+          {{- else }}
+          command:
+            - python3
+            - /opt/triage-lab/eventgrid_stub.py
+            - --host
+            - 0.0.0.0
+            - --port
+            - "6100"
+            - --config
+            - /etc/triage-lab/subscriptions.json
+            - --deadletter-dir
+            - /tmp/deadletter
+          ports:
+            - name: http
+              containerPort: 6100
+          env:
+            - name: EVENTGRID_TOPIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.secretSettings.secretName }}
+                  key: EVENTGRID_TOPIC_KEY
+            - name: NOTIFY_WEBHOOK_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $root.Values.functionKeys.secretName }}
+                  key: host.systemKey.eventgrid_extension
+          {{- end }}
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          securityContext:
+            {{- include "ticket-triage.containerSecurity" $root | nindent 12 }}
+            readOnlyRootFilesystem: true
+          resources:
+            {{- toYaml $root.Values.lab.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq $tool "eventgrid" }}
+            - name: subscriptions
+              mountPath: /etc/triage-lab
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: { sizeLimit: 16Mi }
+        {{- if eq $tool "eventgrid" }}
+        - name: subscriptions
+          configMap:
+            name: {{ $root.Release.Name }}-lab-eventgrid
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $root.Release.Name }}-lab-{{ $tool }}
+  namespace: {{ $root.Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" $root | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ticket-triage.selector" (dict "root" $root "component" (printf "lab-%s" $tool)) | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ if eq $tool "llm" }}11434{{ else }}6100{{ end }}
+      targetPort: http
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-lab-eventgrid
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+data:
+  subscriptions.json: |
+    {
+      "topic": "evgt-triage-cluster",
+      "retryBackoffSeconds": [2, 4, 8, 16],
+      "subscriptions": [
+        {
+          "name": "notify",
+          "includedEventTypes": ["Ticket.Triaged"],
+          "endpoint": "http://{{ .Release.Name }}-http.{{ .Release.Namespace }}.svc.cluster.local:8080/runtime/webhooks/EventGrid?functionName=notify_ticket",
+          "keyEnv": "NOTIFY_WEBHOOK_KEY",
+          "maxDeliveryAttempts": 5,
+          "timeoutSeconds": 30
+        }
+      ]
+    }
+{{- end }}

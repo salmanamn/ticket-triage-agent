@@ -17,7 +17,7 @@ Markers in the ticket text force failure paths:
   FAKE_LLM_INVENT_SOURCE  cites an id that was not retrieved
   FAKE_LLM_HTTP500        HTTP 500
 
-Usage: ./scripts/fake_llm.py [--port 11434] [--dimensions 768]   (stop the Ollama container first)
+Usage: ./scripts/fake_llm.py [--host 127.0.0.1] [--port 11434] [--dimensions 768]   (stop the Ollama container first)
 """
 
 import argparse
@@ -233,19 +233,20 @@ def make_handler(default_dimensions: int, requests: deque) -> type[BaseHTTPReque
     return Handler
 
 
-def make_server(port: int = 11434, dimensions: int = 768) -> ThreadingHTTPServer:
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(dimensions, deque(maxlen=200)))
+def make_server(port: int = 11434, dimensions: int = 768, host: str = "127.0.0.1") -> ThreadingHTTPServer:
+    server = ThreadingHTTPServer((host, port), make_handler(dimensions, deque(maxlen=200)))
     server.daemon_threads = True
     return server
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1", help="listen address (0.0.0.0 in a pod, Project 7)")
     parser.add_argument("--port", type=int, default=11434)
     parser.add_argument("--dimensions", type=int, default=768)
     args = parser.parse_args()
-    server = make_server(args.port, args.dimensions)
-    print(f"fake LLM listening on http://127.0.0.1:{args.port}/v1 (embeddings: {args.dimensions} dims)", flush=True)
+    server = make_server(args.port, args.dimensions, args.host)
+    print(f"fake LLM listening on http://{args.host}:{args.port}/v1 (embeddings: {args.dimensions} dims)", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

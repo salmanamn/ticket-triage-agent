@@ -10,8 +10,10 @@ Mimics what the app relies on: `POST /api/events` with `aeg-sas-key`, CloudEvent
 400/413, dead-letter files after the last attempt. Not emulated: validation handshake, advanced filters, batching,
 managed identity, schema mapping.
 
-Usage: ./scripts/eventgrid_stub.py [--port 6100] [--config emulators/eventgrid/subscriptions.json]
+Usage: ./scripts/eventgrid_stub.py [--host 127.0.0.1] [--port 6100] [--config emulators/eventgrid/subscriptions.json]
 Key: EVENTGRID_TOPIC_KEY from src/local.settings.json (or the env var of the same name).
+A subscription with "keyEnv": NAME sends the webhook key from that env var as `code=` (a Functions host in a
+container checks it; `func start` doesn't). The key is never logged (Project 7, D30).
 Inspect: GET /health, GET /_stub/deliveries (last 200 delivery results).
 """
 
@@ -22,6 +24,7 @@ import queue
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import deque
 from datetime import UTC, datetime
@@ -93,7 +96,7 @@ class Topic:
 
     def _post(self, sub: dict, event: dict, attempt: int) -> int:
         req = urllib.request.Request(  # noqa: S310 - local http endpoints from the committed config
-            sub["endpoint"],
+            webhook_url(sub),
             data=json.dumps([event]).encode(),
             method="POST",
             headers={
@@ -184,13 +187,40 @@ def make_handler(topic: Topic) -> type[BaseHTTPRequestHandler]:
     return Handler
 
 
-def make_server(port: int, key: str, subscriptions: list[dict], deadletter_dir: Path, backoff_s: list[float]):
+def webhook_url(sub: dict) -> str:
+    """The subscription's endpoint, plus `code=<key>` when it names a keyEnv (Functions host in a container)."""
+    if not (name := sub.get("keyEnv")):
+        return sub["endpoint"]
+    key = os.environ.get(name)
+    if not key:
+        raise SystemExit(f"subscription {sub['name']}: env var {name} (its webhook key) is not set")
+    separator = "&" if "?" in sub["endpoint"] else "?"
+    return f"{sub['endpoint']}{separator}{urllib.parse.urlencode({'code': key})}"
+
+
+def describe(sub: dict) -> str:
+    """The start-up line for a subscription: the endpoint as configured, never the key it sends."""
+    keyed = f" (+ code from ${sub['keyEnv']})" if sub.get("keyEnv") else ""
+    return f"SUBSCRIPTION {sub['name']} types={sub.get('includedEventTypes') or 'all'} -> {sub['endpoint']}{keyed}"
+
+
+def make_server(
+    port: int,
+    key: str,
+    subscriptions: list[dict],
+    deadletter_dir: Path,
+    backoff_s: list[float],
+    host: str = "127.0.0.1",
+):
+    for sub in subscriptions:
+        webhook_url(sub)  # a missing key stops the stub at start, not at the first event
     topic = Topic(key, subscriptions, deadletter_dir, backoff_s)
-    return ThreadingHTTPServer(("127.0.0.1", port), make_handler(topic))
+    return ThreadingHTTPServer((host, port), make_handler(topic))
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1", help="listen address (0.0.0.0 in a pod, D30)")
     parser.add_argument("--port", type=int, default=6100)
     parser.add_argument("--config", default=str(ROOT / "emulators" / "eventgrid" / "subscriptions.json"))
     parser.add_argument("--deadletter-dir", default=str(ROOT / "data" / "eventgrid" / "deadletter"))
@@ -203,10 +233,11 @@ def main() -> None:
         config["subscriptions"],
         Path(args.deadletter_dir),
         config.get("retryBackoffSeconds", [2]),
+        args.host,
     )
     for sub in config["subscriptions"]:
-        log(f"SUBSCRIPTION {sub['name']} types={sub.get('includedEventTypes') or 'all'} -> {sub['endpoint']}")
-    log(f"LISTENING   topic={config.get('topic', 'local')} http://127.0.0.1:{args.port}/api/events")
+        log(describe(sub))
+    log(f"LISTENING   topic={config.get('topic', 'local')} http://{args.host}:{args.port}/api/events")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

@@ -1,0 +1,39 @@
+# Ingest API, Event Grid webhook (notify) and, on the laptop, the queue depth for KEDA: always on.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-http
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: http
+spec:
+  replicas: {{ .Values.http.replicas }}
+  selector:
+    matchLabels:
+      {{- include "ticket-triage.selector" (dict "root" . "component" "http") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ticket-triage.labels" . | nindent 8 }}
+        app.kubernetes.io/component: http
+      annotations:
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- include "ticket-triage.functionsPod" (dict "root" . "functions" .Values.functions.http "resources" .Values.http.resources "ready" "/api/health") | nindent 6 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-http
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "ticket-triage.selector" (dict "root" . "component" "http") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

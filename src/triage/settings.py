@@ -18,6 +18,11 @@ class ServiceBusSettings:
     fully_qualified_namespace: str | None
 
 
+def queue_depth_endpoint() -> bool:
+    """GET /api/queue-depth (D29): only where KEDA can't read the queue length itself (the emulator on a laptop)."""
+    return os.getenv("QUEUE_DEPTH_ENDPOINT", "false").lower() == "true"
+
+
 def servicebus() -> ServiceBusSettings:
     """Local: ServiceBusConnection (emulator). Azure: ServiceBusConnection__fullyQualifiedNamespace (MI)."""
     conn = os.getenv("ServiceBusConnection")
@@ -68,6 +73,9 @@ class CosmosSettings:
     database: str
     kb_container: str
     triage_container: str
+    # false only when the emulator is reached at another address than its own (Project 7: a pod on the laptop
+    # cluster); the emulator advertises http://localhost:8081 as its region endpoint, which a pod can't reach (D28)
+    endpoint_discovery: bool
 
 
 def cosmos() -> CosmosSettings:
@@ -77,6 +85,7 @@ def cosmos() -> CosmosSettings:
         database=os.getenv("COSMOS_DATABASE", "triage"),
         kb_container=os.getenv("COSMOS_KB_CONTAINER", "knowledge"),
         triage_container=os.getenv("COSMOS_TRIAGE_CONTAINER", "triage"),
+        endpoint_discovery=os.getenv("COSMOS_ENDPOINT_DISCOVERY", "true").lower() != "false",
     )
 
 

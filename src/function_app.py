@@ -10,7 +10,7 @@ from triage.ai import OpenAIChatModel, OpenAIEmbedder
 from triage.events import EventGridPublisher, EventRelay
 from triage.ingest import handle_submission
 from triage.notify import AcsMailer, Mailboxes, Mailer, Notifier, SmtpMailer
-from triage.queue import ServiceBusPublisher
+from triage.queue import QUEUE_DEPTH_LIMIT, ServiceBusPublisher, queue_depth
 from triage.retrieval import Retriever
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -73,6 +73,19 @@ def submit_ticket(req: func.HttpRequest) -> func.HttpResponse:
 @app.route(route="health", methods=["GET"], auth_level=func.AuthLevel.ANONYMOUS)
 def health(req: func.HttpRequest) -> func.HttpResponse:
     return func.HttpResponse('{"status":"ok"}', mimetype="application/json")
+
+
+if settings.queue_depth_endpoint():
+    # Laptop cluster only (D29): KEDA's metrics-api scaler polls this with a host key; Azure uses KEDA's own scaler.
+    @app.route(route="queue-depth", methods=["GET"])
+    def queue_depth_report(req: func.HttpRequest) -> func.HttpResponse:
+        try:
+            count = queue_depth()
+        except Exception as exc:
+            log.error("Queue depth failed: %s", type(exc).__name__)
+            return func.HttpResponse('{"error":"unavailable"}', status_code=503, mimetype="application/json")
+        body = {"messageCount": count, "limit": QUEUE_DEPTH_LIMIT}
+        return func.HttpResponse(json.dumps(body), mimetype="application/json")
 
 
 @app.service_bus_queue_trigger(arg_name="msg", queue_name="%TICKETS_QUEUE%", connection="ServiceBusConnection")

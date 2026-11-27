@@ -1,0 +1,16 @@
+# Non-secret settings for both Functions deployments. The first three belong to the container, not to the app.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+data:
+  FUNCTIONS_WORKER_RUNTIME: python
+  # Host keys from the files mounted at /run/secrets/functions-keys, read-only: no Kubernetes API (D30)
+  AzureWebJobsSecretStorageType: kubernetes
+  AzureFunctionsJobHost__Logging__Console__IsEnabled: "true"
+  {{- range $name, $value := .Values.settings }}
+  {{ $name }}: {{ $value | toString | quote }}
+  {{- end }}

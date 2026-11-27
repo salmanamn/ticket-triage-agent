@@ -1,0 +1,17 @@
+# CI only (the chart job): every template rendered, with a made-up digest. The platform repo has the real values.
+image:
+  digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+functions:
+  http: [submit_ticket, health, notify_ticket, queue_depth_report]
+settings:
+  TICKETS_QUEUE: tickets
+  QUEUE_DEPTH_ENDPOINT: "true"
+network:
+  egress:
+    - cidr: 192.0.2.0/28 # TEST-NET-1: an address range that is never routed
+      ports: [5672, 8081]
+  ingressFromNamespaces:
+    - namespace: keda
+      podLabels: { app.kubernetes.io/name: keda-operator }
+lab:
+  enabled: true

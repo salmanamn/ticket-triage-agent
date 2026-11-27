@@ -1,0 +1,53 @@
+# The Service Bus trigger: KEDA owns the replica count (no replicas field, or every apply would reset it).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  selector:
+    matchLabels:
+      {{- include "ticket-triage.selector" (dict "root" . "component" "worker") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "ticket-triage.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+      annotations:
+        checksum/settings: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      # in-flight messages: the host stops its listeners and finishes them (lock renewal covers the rest, D11)
+      terminationGracePeriodSeconds: 60
+      {{- include "ticket-triage.functionsPod" (dict "root" . "functions" .Values.functions.worker "resources" .Values.worker.resources "ready" "/admin/host/ping") | nindent 6 }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ .Release.Name }}-worker
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ticket-triage.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ .Release.Name }}-worker
+  minReplicaCount: {{ .Values.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.keda.maxReplicas }}
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  triggers:
+    - type: metrics-api
+      metricType: AverageValue
+      metadata:
+        url: http://{{ .Release.Name }}-http.{{ .Release.Namespace }}.svc.cluster.local:8080/api/queue-depth
+        valueLocation: messageCount
+        targetValue: {{ .Values.keda.messagesPerReplica | quote }}
+        activationTargetValue: "0"
+        authMode: apiKey
+        method: header
+        keyParamName: x-functions-key
+      authenticationRef:
+        kind: ClusterTriggerAuthentication
+        name: {{ .Values.keda.metricsApi.clusterTriggerAuthentication }}
