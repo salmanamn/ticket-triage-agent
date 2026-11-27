@@ -1,0 +1,61 @@
+# Ticket triage as a Kubernetes tenant (D30). Neutral defaults: the platform repo (secure-ai-platform) gives the
+# values for its cluster and pins the image by digest. Secrets are never values: the platform creates them.
+
+image:
+  repository: ghcr.io/salmanamn/ticket-triage
+  digest: "" # required, sha256:<64 hex>: a cluster runs what CI built and scanned, not a tag
+
+# Which functions each deployment loads (AzureFunctionsJobHost__functions__N). Both run the same image.
+functions:
+  http: [submit_ticket, health, notify_ticket] # the platform adds queue_depth_report on the laptop (D29)
+  worker: [triage_ticket]
+
+# Non-secret app settings, as env vars (the same names as src/local.settings.json and the Azure app settings).
+settings: {}
+
+# Secret app settings: env vars read from a Secret the platform creates in the namespace (D16: tenants can't).
+secretSettings:
+  secretName: triage-settings
+  keys:
+    [AzureWebJobsStorage, ServiceBusConnection, COSMOS_KEY, EVENTGRID_TOPIC_KEY]
+
+# Functions host keys as files (D9 of the platform): a Secret mounted at /run/secrets/functions-keys, read-only.
+functionKeys:
+  secretName: triage-function-keys
+
+http:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 640Mi }
+
+worker:
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 768Mi }
+
+# The worker is scaled by KEDA from the queue length.
+keda:
+  minReplicas: 0
+  maxReplicas: 2
+  pollingInterval: 5
+  cooldownPeriod: 60
+  messagesPerReplica: 1
+  # metrics-api: GET /api/queue-depth on the http deployment with a host key from a ClusterTriggerAuthentication
+  # (the laptop: KEDA's Service Bus scaler can't read the emulator, D29).
+  metricsApi:
+    clusterTriggerAuthentication: triage-queue-depth
+
+# Network policies the tenant needs on top of the platform's default deny (DNS is the platform's).
+network:
+  # Where the data services are: ranges and ports (exactly as the platform lists them for this tenant).
+  egress: []
+  # Namespaces whose pods may call the http deployment (KEDA's operator, for the queue depth).
+  ingressFromNamespaces: []
+
+# Lab tools for a laptop cluster: the fake LLM and the Event Grid stub, both from this image (/opt/triage-lab).
+lab:
+  enabled: false
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 96Mi }

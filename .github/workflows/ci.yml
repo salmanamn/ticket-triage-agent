@@ -173,3 +173,105 @@ jobs:
         run: ./scripts/iac.sh wait-floci && ./scripts/trust-floci-cert.sh
       - name: Full-stack plan vs floci-az -> Conftest gate -> every IaC mutation must be denied
         run: ./scripts/iac.sh gate
+
+  chart:
+    name: chart
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install Helm (pinned, checksum-verified)
+        run: ./scripts/ci-tools.sh helm
+      - name: helm lint
+        run: helm lint deploy/chart/ticket-triage -f deploy/chart/ci-values.yaml
+      - name: Every template renders (lab on, KEDA, network policies)
+        run: |
+          set -o pipefail
+          helm template triage deploy/chart/ticket-triage -n triage -f deploy/chart/ci-values.yaml | grep -c '^kind:'
+      - name: No digest, no render (a cluster runs what CI built, D30)
+        run: |
+          if helm template triage deploy/chart/ticket-triage -n triage > /dev/null 2> err.txt; then
+            echo "rendered without image.digest"; exit 1
+          fi
+          grep -q "image.digest is required" err.txt
+
+  image:
+    name: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install uv and Trivy
+        run: pipx install "uv==${UV_VERSION}" && ./scripts/ci-tools.sh trivy
+      - name: Sync
+        run: uv sync --locked
+      - name: Build
+        run: docker build --quiet -t ticket-triage:ci .
+      - name: Image rules, then the host started without a network (D28)
+        run: uv run python scripts/check_image.py --image ticket-triage:ci
+      - name: Scan (no fixable Critical; High reported, D31) and SBOM
+        run: |
+          set -o pipefail
+          trivy image --quiet --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL --format table ticket-triage:ci | tee trivy.txt
+          trivy image --quiet --format cyclonedx --output sbom.cdx.json ticket-triage:ci
+          high=$(trivy image --quiet --scanners vuln --ignore-unfixed --severity HIGH --format json ticket-triage:ci | jq '[.Results[]?.Vulnerabilities[]?] | length')
+          echo "fixable High findings: $high (reported, not gated)" | tee -a "$GITHUB_STEP_SUMMARY"
+          trivy image --quiet --scanners vuln --ignore-unfixed --severity CRITICAL --exit-code 1 ticket-triage:ci > /dev/null
+          echo "fixable Critical findings: 0" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Save the image and its SBOM
+        run: docker save ticket-triage:ci | zstd -T0 -3 -q -o image.tar.zst && ls -lh image.tar.zst
+      - uses: actions/upload-artifact@v7
+        with:
+          name: image
+          path: |
+            image.tar.zst
+            sbom.cdx.json
+            trivy.txt
+          retention-days: ${{ github.event_name == 'push' && 7 || 1 }}
+          compression-level: 0
+
+  publish:
+    name: publish
+    needs:
+      [
+        lint,
+        unit,
+        integration,
+        tests-must-fail,
+        iac-static,
+        iac-plan,
+        chart,
+        image,
+      ]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/ticket-triage
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: image
+      - name: Load
+        run: zstd -dc image.tar.zst | docker load
+      - name: Push to GHCR (sha-<12> and main; the platform pins the digest, D31)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: |
+          echo "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+          short=${GITHUB_SHA::12}
+          for tag in "sha-$short" main; do
+            docker tag ticket-triage:ci "$IMAGE:$tag"
+            docker push --quiet "$IMAGE:$tag"
+          done
+          digest=$(docker buildx imagetools inspect "$IMAGE:sha-$short" --format '{{.Manifest.Digest}}')
+          { echo "| image | pushed |"; echo "|---|---|"; echo "| ticket-triage | \`$IMAGE:sha-$short@$digest\` |"; } >> "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io

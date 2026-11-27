@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ticket-triage
+description: Ticket triage (Functions container) as a tenant of the secure AI platform (Project 7)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

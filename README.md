@@ -61,7 +61,7 @@ The held-out set shows the limit of the small local model: an unrecognised-charg
 
 ## Engineering
 
-- **CI, six required checks on `main`:** `lint`, `unit` (117 tests), `integration` (the real emulators, a deterministic fake LLM, Mailpit), `tests-must-fail` (22 known-bad code changes, each must turn the tests red), `iac-static` (Terraform fmt/validate, Checkov, policy unit tests), `iac-plan` (full plan → Conftest gate with 46 rules → 29 plan mutations, each must be denied).
+- **CI, eight required checks on `main`:** `lint`, `unit` (153 tests), `integration` (the real emulators, a deterministic fake LLM, Mailpit), `tests-must-fail` (31 known-bad code changes, each must turn the tests red), `iac-static` (Terraform fmt/validate, Checkov, policy unit tests), `iac-plan` (full plan → Conftest gate with 46 rules → 29 plan mutations, each must be denied), `chart` (the Helm chart renders), `image` (the container image: its rules, the host started without a network, a Trivy scan, an SBOM). Pushes to `main` publish the image to GHCR.
 - **Infrastructure:** Terraform, `infra/modules/stack` composes seven modules; `infra/envs/local` plans against the floci-az emulator, `infra/envs/azure` uses remote state and is applied only by CI.
 - **Deploys:** GitHub OIDC, no stored cloud credentials. A PR gets a plan; apply and destroy run the exact approved plan after it passes the same policy gate.
 - **Security posture:** local auth disabled on Service Bus, Cosmos DB, Event Grid, Azure OpenAI, Communication Services, Application Insights and storage; roles by id at resource scope; Event Grid dead-letters to a storage account of their own; customer text never reaches a mail header or an event payload. Detections for this stack (key listing, federated credentials) live in [kql-threat-detection-lab](https://github.com/salmanamn/kql-threat-detection-lab).
@@ -82,6 +82,8 @@ Azure, for one evening (through CI; needs the identities from [secure-landing-zo
 
     ./scripts/ci-deploy.sh apply && ./scripts/ci-deploy.sh deploy-code && ./scripts/ci-deploy.sh apply --notify
     ./scripts/ci-deploy.sh destroy
+
+Kubernetes, as the first tenant of [secure-ai-platform](https://github.com/salmanamn/secure-ai-platform) (Project 7): the image `ghcr.io/salmanamn/ticket-triage` and the chart in `deploy/chart/ticket-triage` (decisions D28–D31). The platform repository holds the values, the secrets and the runbook; locally the emulators join the cluster's network with `docker compose -f docker-compose.yml -f docker-compose.cluster.yml --profile notify up -d`.
 
 ## Known limits
 
