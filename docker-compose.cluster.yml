@@ -5,28 +5,28 @@
 #   docker compose -f docker-compose.yml -f docker-compose.cluster.yml --profile notify up -d
 #
 # The network belongs to minikube: start the cluster first (secure-ai-platform: ./scripts/cluster.sh up).
-# 192.168.49.96/28 is the platform's range for this tenant (its egressCIDRs); the four addresses are inside it.
+# 192.168.58.96/28 is the platform's range for this tenant (its egressCIDRs); the four addresses are inside it.
 services:
   servicebus:
     networks:
       default: {}
       aiplat:
-        ipv4_address: 192.168.49.101
+        ipv4_address: 192.168.58.101
   cosmos:
     networks:
       default: {}
       aiplat:
-        ipv4_address: 192.168.49.102
+        ipv4_address: 192.168.58.102
   azurite:
     networks:
       default: {}
       aiplat:
-        ipv4_address: 192.168.49.103
+        ipv4_address: 192.168.58.103
   mailpit:
     networks:
       default: {}
       aiplat:
-        ipv4_address: 192.168.49.104
+        ipv4_address: 192.168.58.104
 
 networks:
   aiplat:
